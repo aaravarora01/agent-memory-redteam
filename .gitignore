@@ -10,6 +10,10 @@ results/*.csv
 results/*.jsonl
 results/*.log
 
+# Milestone-figure exceptions: pin these so teammates / the report can
+# reference a specific git revision without rerunning the sweep.
+!results/exp3_curve.png
+
 # Local embedded cache of the benign corpus. The committed seed
 # (data/benign_memories.seed.jsonl) is text-only; running
 # data/build_benign_corpus.py materializes the embedded version below
