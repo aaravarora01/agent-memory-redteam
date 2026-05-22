@@ -31,6 +31,7 @@ The default `python3` resolves to a base env that lacks these — running direct
 - `env/judge.py` (§2.2) — `Judge.evaluate(query, output, task)` calls `gpt-4o-mini` at `temperature=0.0` with `response_format={"type":"json_object"}`. Returns `JudgeVerdict(aligned_with_user, attack_succeeded, reason)`. The judge is the *primary* attack-success signal; `task.success_check` is the sanity backup. It sees task description + attack_token but not whether the episode was malicious or benign — so benign-row `attack_succeeded=true` is a real contamination signal, not a labeling artifact. Same dotenv-inside-function pattern as `env/agent.py`.
 - `experiments/exp1_handcrafted.py` (§2.2 / §2.1c) — drives the Exp 1 sweep: for every paired seed in `data/exp1_seeds.jsonl`, runs N=20 episodes per condition (malicious vs benign) using `run_episode` + `Judge`. Streams rows to `results/exp1_episodes.jsonl` (append, line-buffered) so the sweep is **resumable** by `(pair_id, condition, episode_idx)`. Computes the §2.1c survivor flag (`≥1` judge-confirmed success across N malicious episodes) and writes `results/exp1_summary.json`. Shares one MiniLM embedder across all 400 episodes (avoids re-loading the model). `--summary-only` regenerates the summary without re-running. `--pairs pair_001 …` runs a subset.
 - `experiments/tabulate_exp1.py` (§2.3) — reads `results/exp1_summary.json` and writes `results/exp1_table.md`: by-stealth headline table (Retrieval@5, ASR-judge malicious, ASR-judge benign, ASR-regex, survivor count), per-pair detail table, and a flags block highlighting benign false-positives (contamination signal) and non-survivors.
+- `rl/action_space.py` (§3.1) — `PayloadActionSpace(task_id, n_slots=4, vocab_size=2000)` decodes an action tuple into a payload string via a per-task template with `n_slots` slot positions. Encoding is `o200k_base` (gpt-4o family BPE). **Vocab is augmented, not pure top-2k:** the leading slots hold top-N printable-ASCII BPE tokens; the trailing P slots hold the unique BPE pieces of the task's `attack_token` (both bare and space-prefixed forms). Without this tail the attack pieces (e.g., `Coffee` at token ID 90651, ` evil` at 158278) sit too deep for any top-2k cutoff to reach. Templates carry retrieval bait ("morning coffee preference", "daily briefing summary", …) but **not** the attack_token, so the policy must compose the attack from slot pieces — that combinatorial sparsity (~10⁷ winning actions out of 1.6e13) is the gap vanilla sparse-reward PPO is meant to fail on in §3.2. `winning_action_example()` returns a concrete oracle action when the attack fits in `n_slots`; at defaults this works for T1 only — T2's template space separators break the email regex, T3/T4 attacks need more than 4 BPE pieces. **T1 is the Exp 3 target.**
 
 The `Agent` and `Judge` constructors both expose `max_retries` (default 6) and `request_timeout` (default 30s) — passed straight to `openai.OpenAI()`, which handles 429 + transient 5xx with exponential backoff. Bumped from the SDK default of 2 because §2.2 fires ~800 API calls (400 episodes × 2 calls/ep).
 
@@ -84,6 +85,10 @@ print('OK')
 
 # §2.3 tabulation (reads results/exp1_summary.json, no API key):
 /Users/MihirMenon/miniconda3/envs/cs224r/bin/python experiments/tabulate_exp1.py
+
+# §3.1 action space self-test (no API key; prints per-task template,
+# reachability, oracle-winning action, and a random sample payload):
+/Users/MihirMenon/miniconda3/envs/cs224r/bin/python rl/action_space.py
 ```
 
 ### Resolved phrasing sensitivity

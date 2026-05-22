@@ -140,10 +140,10 @@ Keep it tiny for tractability. Two options:
 - **(a)** Token-level edits over a fixed payload template ("Alice loves [TOKEN1] [TOKEN2]..."), vocabulary restricted to top-2k BPE tokens. Policy outputs token IDs.
 - **(b)** Discrete: pick 1 of K candidate payload templates + 1 of M slot fillers.
 
-**Recommendation: (b)** — far simpler, gets the failure demo done. Save (a) for the real RL run post-milestone.
+**Recommendation: (a)** — (b)'s K·M ≈ 100-action space is so small that a flat PPO curve wouldn't actually evidence sparse-reward failure: random search would either solve it trivially or fail for reasons unrelated to credit assignment, so the experiment stops probing the thing it's meant to probe. (a) gives a combinatorial enough space (2–4 slots × top-2k BPE ≈ 10⁷–10¹³ joint actions) that a flat curve is genuine evidence about sparse-reward exploration — the failure mode the composite reward is designed to fix. Keep the template fixed and the per-slot vocab capped at 2k so the 2-hour wall-clock budget still fits.
 
 ### 3.2 PPO setup (2 hr)
-- `stable-baselines3` PPO or a hand-rolled minimal PPO. Tiny MLP policy (action = (template_idx, slot_idx)).
+- `stable-baselines3` PPO or a hand-rolled minimal PPO. Tiny MLP policy with one categorical head per slot over a top-2k BPE vocab (action = (token_id_slot1, token_id_slot2, …)); joint log-prob is the sum over slot heads.
 - **Reward = terminal sparse only:** `+1` on task success, `0` otherwise.
 - Train for ~2k episodes (or until you hit a budget — set a wall-clock cap of 2 hours).
 
@@ -181,6 +181,5 @@ One page, three sections matching the prompt:
 - Multi-agent system, cascade propagation metrics.
 - MINJA / MemoryGraft full reproductions (Aarav).
 - KL=0 ablation (needs working RL first).
-- Token-level edit action space.
 - Real benchmark like AgentDojo integration.
 - Larger/multiple LLM backends.
