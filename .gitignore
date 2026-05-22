@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.DS_Store
+
+# Generated artifacts (regenerable from scripts/runs).
+results/*.png
+results/*.csv
+results/*.jsonl
+
+# Local embedded cache of the benign corpus. The committed seed
+# (data/benign_memories.seed.jsonl) is text-only; running
+# data/build_benign_corpus.py materializes the embedded version below
+# for faster MemoryStore loads.
+data/benign_memories.jsonl
+
+# Internal reference notes from the team's sibling IPI codebase
+# (not this project's code; not for redistribution).
+other-codebase.txt
