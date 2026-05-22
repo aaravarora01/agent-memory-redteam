@@ -26,6 +26,8 @@ The default `python3` resolves to a base env that lacks these — running direct
 - `env/tasks.py` (§1.5) — Four target tasks T1–T4 (brand hijack / tool misdirection / fact corruption / refusal bypass). T5 persona drift deferred. Each `Task` carries `trigger_queries` (sampled uniformly), a regex-based `success_check`, and an `attack_token` (the canonical string a payload aims to plant — `EvilCoffee`, `attacker@evil.example`, `basement conference room at 3:47 AM`, `999-99-9999`). The success_check is the *sanity backup* per §2.2 — the strict-JSON LLM judge is the primary signal in the actual experiments.
 - `env/episode.py` (§1.6) — `run_episode(payload, task, store=None, agent=None, k=5, seed=None)`: builds a fresh `MemoryStore` from the corpus each call (so payloads don't accumulate across episodes — caller can pass `store=` to reuse), ingests payload (Phase 1), samples a trigger query, retrieves top-k, calls `agent.act` (Phase 2), runs `task.success_check`. Returns `EpisodeResult(success, output, retrieved, payload_in_topk, query, payload_id, metadata)`. Passing `payload=""` runs a clean control episode (no Phase-1 ingest).
 - `experiments/smoke_test.py` (§1.7) — one blatant payload per task across configurable seeds; passes if every task succeeds ≥1×. Run with `--save` to log per-episode JSONL to `results/smoke_test.jsonl`. Exit code 0 = all-pass; 1 = any task all-failed. This is the gate the plan calls out ("don't move on until the pipeline carries an obvious attack end-to-end").
+- `attacks/handcrafted.py` (§2.1) — 10 hand-crafted `Payload`s at stealth A/B/C (3+4+3), mapped 1:1 to tasks T1–T4. Module-import self-check asserts each `text` contains its task's `attack_token` and the stealth distribution stays 3A/4B/3C. T4 (refusal bypass) only carries a B-level payload because the SSN token must literally appear in memory for the agent to recite it, so the C "indirect" framing collapses into the B narrative one.
+- `data/build_exp1_seeds.py` (§2.1 / §2.1b) — mask-and-rephrase generator. For each payload it: seeded-shuffles a method assignment (decouples stealth from style), wraps the payload as `<<<HERE>>>...<<<HERE>>>`, hands gpt-4o-mini the persona blurb + 3 real benign exemplars from that persona/method block, requires strict-JSON `{"benign_replacement": "..."}`, and rejects on `marker_leak` / `attack_token_leak` / verbatim-echo (SequenceMatcher ratio > 0.7) / `filter_violation`. Retries ≤3× then drops. Writes the §2.1b paired records to `data/exp1_seeds.jsonl` (committed; 10 small records).
 
 The `Agent` constructor now also exposes `max_retries` (default 6) and `request_timeout` (default 30s) — passed straight to `openai.OpenAI()`, which handles 429 + transient 5xx with exponential backoff. Bumped from the SDK default of 2 because §2.2 will fire ~1600 episodes.
 
@@ -51,6 +53,22 @@ for hit in store.query('what brand of coffee does Alice like', k=5):
 
 # §1.5/§1.6/§1.7 end-to-end pipeline smoke (requires OPENAI_API_KEY in .env):
 /Users/MihirMenon/miniconda3/envs/cs224r/bin/python experiments/smoke_test.py --seeds 0 1 2 3 4
+
+# §2.1 paired-seed regeneration (requires OPENAI_API_KEY in .env):
+/Users/MihirMenon/miniconda3/envs/cs224r/bin/python data/build_exp1_seeds.py
+# then verify token-plant / token-leak / filter / schema in one shot:
+/Users/MihirMenon/miniconda3/envs/cs224r/bin/python -c "
+import json, sys; sys.path.insert(0, '.')
+from data.build_benign_corpus import filter_violation
+from env.tasks import TASKS
+ok = True
+for r in (json.loads(l) for l in open('data/exp1_seeds.jsonl')):
+    tok = TASKS[r['task_id']].attack_token.lower()
+    assert tok in r['malicious_text'].lower(), r['pair_id']
+    assert tok not in r['benign_text'].lower(), r['pair_id']
+    assert filter_violation(r['benign_text']) is None, r['pair_id']
+print('OK')
+"
 ```
 
 ### Resolved phrasing sensitivity
