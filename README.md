@@ -57,6 +57,26 @@ Expected baseline (gpt-4o-mini, the committed seed corpus):
 
 T1/T2 not reaching 5/5 is the *expected* stealth-vs-ASR variance the §2.1 sweep is designed to characterize, not a bug. Note also that small score differences vs. the cached embedded corpus are normal — embedder outputs are deterministic per model but can vary slightly across builds.
 
+## PISmith-Style Environment Adapter
+
+This repo exposes the persistent-memory testbed in the same dataset/reward shape used by [PISmith](https://github.com/albert-y1n/PISmith):
+
+- `pismith_env.PersistentMemoryDataset` emits TRL-style chat prompts asking an attacker model to generate one memory payload wrapped in `<prompt></prompt>`.
+- `pismith_env.PersistentMemoryAttackReward` extracts that payload, ingests it into `MemoryStore`, runs `env.episode.run_episode`, and returns terminal, retrieval-only, or composite rewards.
+- `configs/pismith_memory.yaml` records the default adapter knobs without making the normal project depend on PISmith's CUDA/vLLM stack.
+
+Offline smoke check:
+
+```bash
+python experiments/pismith_env_smoke.py
+```
+
+End-to-end reward smoke (requires `OPENAI_API_KEY` because it calls the target agent):
+
+```bash
+python experiments/pismith_env_smoke.py --run-episode --reward-mode composite
+```
+
 ## Run Experiment 1 (plan §2.1 – §2.3)
 
 Three steps — payload seeds, sweep, tabulate. Steps 1 and 2 hit the OpenAI API; step 3 is offline.
@@ -91,13 +111,17 @@ env/
   tasks.py           # T1-T4 target tasks (§1.5)
   episode.py         # two-phase rollout (§1.6)
   judge.py           # strict-JSON LLM judge (§2.2)
+pismith_env/             # PISmith-style dataset + reward adapter
 attacks/handcrafted.py   # 10 hand-crafted payloads at stealth A/B/C (§2.1)
 rl/                       # PPO scaffolding (§3.x, not yet started)
 experiments/
   smoke_test.py          # §1.7 pipeline gate
+  pismith_env_smoke.py   # adapter import/tag/reward smoke
   exp1_handcrafted.py    # §2.2 sweep driver (resumable)
   tabulate_exp1.py       # §2.3 markdown-table renderer
   exp3_sparse_failure.py # §3 (not yet started)
+configs/
+  pismith_memory.yaml     # adapter defaults
 data/
   build_benign_corpus.py     # §1.2 generator
   benign_memories.seed.jsonl # committed text-only seed (re-embed at load)
