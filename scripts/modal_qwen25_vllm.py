@@ -14,6 +14,7 @@ Use that URL with `/v1` in this repo's `.env`:
 
 from __future__ import annotations
 
+import os
 import subprocess
 
 import modal
@@ -27,18 +28,21 @@ MINUTES = 60
 app = modal.App("qwen25-memory-redteam")
 
 image = (
-    modal.Image.debian_slim(python_version="3.11")
+    modal.Image.from_registry(
+        "nvidia/cuda:12.4.1-devel-ubuntu22.04",
+        add_python="3.11",
+    )
     .pip_install(
-        "vllm>=0.6.6",
+        "vllm>=0.10.0",
         "huggingface_hub[hf_transfer]>=0.24.0",
     )
     .env(
         {
-            "HF_HUB_ENABLE_HF_TRANSFER": "1",
-            # vLLM V1 can route sampling through FlashInfer JIT kernels that
-            # require nvcc in the runtime image. V0 avoids that cold-start
-            # failure on Modal's slim Python image.
+            "HF_XET_HIGH_PERFORMANCE": "1",
+            # Keep requesting vLLM V0, but the CUDA devel base image also
+            # provides nvcc if this vLLM build still uses FlashInfer JIT.
             "VLLM_USE_V1": "0",
+            "CUDA_HOME": "/usr/local/cuda",
         }
     )
 )
@@ -60,6 +64,9 @@ vllm_cache = modal.Volume.from_name("qwen25-vllm-cache", create_if_missing=True)
 @modal.concurrent(max_inputs=8)
 @modal.web_server(port=VLLM_PORT, startup_timeout=20 * MINUTES)
 def serve() -> None:
+    os.environ.setdefault("VLLM_USE_V1", "0")
+    os.environ.setdefault("CUDA_HOME", "/usr/local/cuda")
+
     cmd = [
         "vllm",
         "serve",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 
 @dataclass
@@ -25,7 +26,8 @@ class PISmithMemoryEnvConfig:
     seed: int = 0
     corpus_path: str | Path | None = None
 
-    target_model_name_or_path: str = "qwen-plus"
+    # None means defer to QWEN_MODEL / LLM_MODEL from .env.
+    target_model_name_or_path: Optional[str] = None
     target_model_temperature: float = 0.2
     target_model_max_tokens: int = 256
     target_request_timeout: float = 300.0

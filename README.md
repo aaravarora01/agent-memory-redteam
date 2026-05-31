@@ -31,10 +31,10 @@ This repo contains the **testbed + RL attacker** slice (Mihir). For the mileston
    QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
    ```
 
-   The runtime uses the OpenAI Python SDK as an OpenAI-compatible transport, but
-   it authenticates against Qwen/DashScope when `QWEN_API_KEY` or
-   `DASHSCOPE_API_KEY` is present. You can still use another OpenAI-compatible
-   endpoint by setting `OPENAI_API_KEY` plus `OPENAI_BASE_URL` or `LLM_BASE_URL`.
+   The runtime uses a small direct HTTP client against the OpenAI-compatible
+   chat-completions API exposed by Qwen/DashScope or Modal vLLM. You can still
+   use another compatible endpoint by setting `OPENAI_API_KEY` plus
+   `OPENAI_BASE_URL` or `LLM_BASE_URL`.
    For Modal-hosted Qwen2.5, use the commands in the next section and copy
    `.env.example` to `.env`.
 
@@ -80,6 +80,8 @@ python experiments/pismith_env_smoke.py --run-episode --reward-mode composite --
 
 The first live request can take several minutes while Modal starts the container
 and vLLM loads Qwen2.5. Later requests are usually faster while the app is warm.
+The Modal image uses an NVIDIA CUDA development base image because recent vLLM
+builds can JIT-compile FlashInfer sampling kernels and need `nvcc` available.
 
 ## Verify the pipeline (plan §1.7 smoke test)
 
@@ -106,7 +108,7 @@ This repo exposes the persistent-memory testbed in the same dataset/reward shape
 
 - `pismith_env.PersistentMemoryDataset` emits TRL-style chat prompts asking an attacker model to generate one memory payload wrapped in `<prompt></prompt>`.
 - `pismith_env.PersistentMemoryAttackReward` extracts that payload, ingests it into `MemoryStore`, runs `env.episode.run_episode`, and returns terminal, retrieval-only, or composite rewards.
-- `configs/pismith_memory.yaml` records the default adapter knobs without making the normal project depend on PISmith's CUDA/vLLM stack.
+- `configs/pismith_memory.yaml` records the default adapter knobs without making the normal project depend on PISmith's CUDA/vLLM stack. The smoke script defers to `QWEN_MODEL` from `.env`, so use `Qwen/Qwen2.5-7B-Instruct` for the Modal backend.
 
 Offline smoke check:
 
