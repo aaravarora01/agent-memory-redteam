@@ -2,7 +2,7 @@
 
 Stanford CS224R final project — *An RL Framework for Persistent Memory Attacks on LLM Agents*. Frames memory poisoning as a two-phase MDP: Phase 1 ingests payloads into a persistent memory store; Phase 2 retrieves + executes on an independently-sampled user query that arrives later.
 
-This repo contains the **testbed + RL attacker** slice (Mihir). For the milestone scope, reward components and benchmark stratification live in collaborators' branches — see `plan.md` (team ownership section) and `CLAUDE.md`.
+This repo contains the **testbed + RL attacker** slice (Mihir). The **finance domain benchmark** (Zihan) lives in [`finance_poisoning/README.md`](finance_poisoning/README.md). For other milestone scope, see `plan.md` (team ownership section) and `CLAUDE.md`.
 
 ## Prerequisites
 
@@ -157,6 +157,7 @@ env/
   episode.py         # two-phase rollout (§1.6)
   judge.py           # strict-JSON LLM judge (§2.2)
 pismith_env/             # PISmith-style dataset + reward adapter
+finance_poisoning/         # Synthetic finance memory-poisoning benchmark (Zihan)
 attacks/handcrafted.py   # 10 hand-crafted payloads at stealth A/B/C (§2.1)
 rl/                       # PPO scaffolding (§3.x, not yet started)
 experiments/

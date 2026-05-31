@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 ## Repository state
 
@@ -212,7 +212,7 @@ Default: do not propose multi-agent-system work or full-benchmark integration fo
 These are deliberate constraints — respect them when suggesting changes:
 
 - Single agent, single memory store. **No MAS for the milestone.**
-- Single backend: `gpt-4o-mini`. Claude Haiku is a later swap option.
+- Single backend: `gpt-4o-mini`. Codex Haiku is a later swap option.
 - 3–5 target tasks total. Resist scope creep.
 - No MINJA reproduction this sprint (Aarav's slice).
 - Two milestone experiments: **Exp 1** (hand-crafted payload sweep, paired benign control) and **Exp 3** (vanilla PPO with sparse terminal reward — the *goal is to show it fails*, motivating the composite reward).
@@ -236,12 +236,12 @@ When implementing the seed/example generation pipeline, follow these — they ar
 
 ## Keeping this file current (mandatory)
 
-This CLAUDE.md must be updated **in the same change** that introduces or modifies any feature, convention, command, or architectural decision in this repo. Treat it as part of the diff, not as follow-up work:
+This AGENTS.md must be updated **in the same change** that introduces or modifies any feature, convention, command, or architectural decision in this repo. Treat it as part of the diff, not as follow-up work:
 
 - **Add** a new feature, module, command, or directory → add the corresponding section/command/note here before considering the task done.
 - **Change** the behavior of something already documented here (scope guardrails, conventions, team ownership, milestone goals, reward shape, schema, etc.) → update the relevant section in the same edit.
 - **Remove or rename** something documented here → strike or rename it here in the same edit.
 - If a change is large enough to warrant a new top-level section (e.g., real build/test commands once code lands), add it; do not defer.
-- If you are unsure whether a change is worth documenting, err on the side of writing one line. A stale CLAUDE.md is worse than a slightly verbose one.
+- If you are unsure whether a change is worth documenting, err on the side of writing one line. A stale AGENTS.md is worse than a slightly verbose one.
 
-This rule applies to every Claude Code session working in this repo, including future instances reading this file for the first time.
+This rule applies to every Codex session working in this repo, including future instances reading this file for the first time.

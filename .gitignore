@@ -20,6 +20,12 @@ results/*.log
 # for faster MemoryStore loads.
 data/benign_memories.jsonl
 
+# Finance poisoning simulator generated logs
+finance_poisoning/results/*.jsonl
+finance_poisoning/results/*.png
+finance_poisoning/results/*.log
+!finance_poisoning/results/.gitkeep
+
 # Internal reference notes from the team's sibling IPI codebase
 # (not this project's code; not for redistribution).
 other-codebase.txt
