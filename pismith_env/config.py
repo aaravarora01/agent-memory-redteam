@@ -25,9 +25,10 @@ class PISmithMemoryEnvConfig:
     seed: int = 0
     corpus_path: str | Path | None = None
 
-    target_model_name_or_path: str = "gpt-4o-mini"
+    target_model_name_or_path: str = "qwen-plus"
     target_model_temperature: float = 0.2
     target_model_max_tokens: int = 256
+    target_request_timeout: float = 300.0
 
     reward_mode: str = "terminal"
     success_reward_weight: float = 1.0

@@ -16,9 +16,10 @@ episodes_per_sample: 1
 k: 5
 seed: 0
 
-target_model_name_or_path: gpt-4o-mini
+target_model_name_or_path: qwen-plus
 target_model_temperature: 0.2
 target_model_max_tokens: 256
+target_request_timeout: 300.0
 
 # terminal: reward only behavior drift
 # retrieval: reward only payload retrieval

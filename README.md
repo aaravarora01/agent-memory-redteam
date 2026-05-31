@@ -7,7 +7,7 @@ This repo contains the **testbed + RL attacker** slice (Mihir). For the mileston
 ## Prerequisites
 
 - Python 3.10+
-- An OpenAI API key (the agent uses `gpt-4o-mini`)
+- A Qwen/DashScope API key for live target-agent calls
 - ~500 MB of disk (mostly for the cached sentence-transformers embedder model, downloaded on first run)
 
 ## Setup
@@ -22,13 +22,21 @@ This repo contains the **testbed + RL attacker** slice (Mihir). For the mileston
 
    `requirements.txt` pins `openai`, `sentence-transformers`, `faiss-cpu`, `numpy`, `tqdm`, `python-dotenv`.
 
-2. **Drop your OpenAI key in a repo-root `.env`** (gitignored):
+2. **Drop your Qwen/DashScope or Modal-vLLM settings in a repo-root `.env`** (gitignored):
 
    ```
-   OPENAI_API_KEY=sk-...
+   QWEN_API_KEY=...
+   QWEN_MODEL=qwen-plus
+   # Optional; default shown here:
+   QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
    ```
 
-   Every module that calls the OpenAI API loads `.env` lazily via `python-dotenv`.
+   The runtime uses the OpenAI Python SDK as an OpenAI-compatible transport, but
+   it authenticates against Qwen/DashScope when `QWEN_API_KEY` or
+   `DASHSCOPE_API_KEY` is present. You can still use another OpenAI-compatible
+   endpoint by setting `OPENAI_API_KEY` plus `OPENAI_BASE_URL` or `LLM_BASE_URL`.
+   For Modal-hosted Qwen2.5, use the commands in the next section and copy
+   `.env.example` to `.env`.
 
 3. **(Optional) Materialize the embedded corpus cache.** The committed `data/benign_memories.seed.jsonl` is text-only (~72 KB, 320 entries). On first use `MemoryStore.from_corpus` auto-embeds at load time (~3-5 s). If you'd rather pay that cost once and cache it on disk, run:
 
@@ -37,6 +45,41 @@ This repo contains the **testbed + RL attacker** slice (Mihir). For the mileston
    ```
 
    That writes the embedded `data/benign_memories.jsonl` (~2.7 MB, gitignored). Subsequent loads then skip re-embedding. **Don't commit this file** — `.gitignore` is set up to exclude it. If you need to regenerate the *committed* seed for any reason (e.g. you changed personas/templates), strip the `embedding` field from the rows before committing.
+
+## Modal Qwen2.5 Backend
+
+To run live episodes without an OpenAI key, deploy Qwen2.5 on Modal with vLLM:
+
+```bash
+pip install modal
+modal setup
+modal deploy scripts/modal_qwen25_vllm.py
+```
+
+The deploy command prints a URL like:
+
+```text
+https://your-workspace--qwen25-memory-redteam-serve.modal.run
+```
+
+Copy `.env.example` to `.env`, then replace the base URL with your Modal URL plus `/v1`:
+
+```bash
+QWEN_API_KEY=EMPTY
+QWEN_MODEL=Qwen/Qwen2.5-7B-Instruct
+QWEN_BASE_URL=https://your-workspace--qwen25-memory-redteam-serve.modal.run/v1
+```
+
+`QWEN_API_KEY=EMPTY` is enough for the default vLLM server because it does not enforce auth. The OpenAI SDK still requires a non-empty client-side API key string.
+
+Then run:
+
+```bash
+python experiments/pismith_env_smoke.py --run-episode --reward-mode composite --request-timeout 300
+```
+
+The first live request can take several minutes while Modal starts the container
+and vLLM loads Qwen2.5. Later requests are usually faster while the app is warm.
 
 ## Verify the pipeline (plan §1.7 smoke test)
 
@@ -71,10 +114,10 @@ Offline smoke check:
 python experiments/pismith_env_smoke.py
 ```
 
-End-to-end reward smoke (requires `OPENAI_API_KEY` because it calls the target agent):
+End-to-end reward smoke (requires `QWEN_API_KEY`/`DASHSCOPE_API_KEY` because it calls the target agent):
 
 ```bash
-python experiments/pismith_env_smoke.py --run-episode --reward-mode composite
+python experiments/pismith_env_smoke.py --run-episode --reward-mode composite --request-timeout 300
 ```
 
 ## Run Experiment 1 (plan §2.1 – §2.3)
@@ -122,6 +165,8 @@ experiments/
   exp3_sparse_failure.py # §3 (not yet started)
 configs/
   pismith_memory.yaml     # adapter defaults
+scripts/
+  modal_qwen25_vllm.py    # Modal vLLM server for Qwen2.5
 data/
   build_benign_corpus.py     # §1.2 generator
   benign_memories.seed.jsonl # committed text-only seed (re-embed at load)
@@ -142,6 +187,6 @@ CLAUDE.md                 # conventions / commands / scope guardrails
 ## Common gotchas
 
 - **`ModuleNotFoundError: numpy`** — you're on the base Python. Activate the `cs224r` conda env (or your equivalent venv) first.
-- **`RuntimeError: OPENAI_API_KEY is not set`** — no `.env` at repo root, or the key isn't named `OPENAI_API_KEY`. The error message lists both lookup paths (process env, repo-root `.env`).
+- **`RuntimeError: No chat model API key is set`** — no `.env` at repo root, or the key isn't named `QWEN_API_KEY` / `DASHSCOPE_API_KEY`. For non-Qwen OpenAI-compatible providers, set `OPENAI_API_KEY` plus the provider base URL.
 - **First run is slow** — sentence-transformers downloads `all-MiniLM-L6-v2` (~80 MB) into `~/.cache/huggingface` the first time. Subsequent runs are fast.
 - **HF unauthenticated warning** — harmless; `HF_TOKEN` only matters if you hit rate limits on model downloads.

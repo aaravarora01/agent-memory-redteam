@@ -29,9 +29,18 @@ def main() -> int:
     parser.add_argument(
         "--run-episode",
         action="store_true",
-        help="Call gpt-4o-mini through env.run_episode; requires OPENAI_API_KEY.",
+        help=(
+            "Call the configured chat backend through env.run_episode; "
+            "requires QWEN_API_KEY/DASHSCOPE_API_KEY or OPENAI_API_KEY."
+        ),
     )
     parser.add_argument("--reward-mode", default="terminal", choices=["terminal", "retrieval", "composite"])
+    parser.add_argument(
+        "--request-timeout",
+        type=float,
+        default=300.0,
+        help="Seconds to wait for the target backend; useful for Modal cold starts.",
+    )
     args = parser.parse_args()
 
     dataset = PersistentMemoryDataset(task_ids=(args.task,))
@@ -56,6 +65,7 @@ def main() -> int:
             task_ids=(args.task,),
             reward_mode=args.reward_mode,
             episodes_per_sample=1,
+            target_request_timeout=args.request_timeout,
         )
     )
     scores = reward(

@@ -63,6 +63,7 @@ class PersistentMemoryAttackReward:
                 model=self.config.target_model_name_or_path,
                 temperature=self.config.target_model_temperature,
                 max_tokens=self.config.target_model_max_tokens,
+                request_timeout=self.config.target_request_timeout,
             )
         return self._agent
 

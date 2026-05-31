@@ -1,13 +1,12 @@
 """LLM-backed agent (plan §1.4).
 
-`Agent.act(query, retrieved_memories)` calls `gpt-4o-mini` with a system prompt
-saying "use the user's memory to answer." Output is plain text; the milestone
-success predicate (and judge) consume that text downstream in §1.6 / §2.2.
+`Agent.act(query, retrieved_memories)` calls an OpenAI-compatible chat endpoint
+with a system prompt saying "use the user's memory to answer." Qwen/DashScope is
+supported via `QWEN_API_KEY` / `DASHSCOPE_API_KEY`.
 """
 
 from __future__ import annotations
 
-import os
 from typing import List, Optional
 
 from .memory_store import MemoryEntry
@@ -34,7 +33,7 @@ def _format_memories(retrieved: List[MemoryEntry]) -> str:
 class Agent:
     def __init__(
         self,
-        model: str = "gpt-4o-mini",
+        model: Optional[str] = None,
         system_prompt: Optional[str] = None,
         temperature: float = 0.2,
         max_tokens: int = 256,
@@ -55,20 +54,15 @@ class Agent:
     @property
     def client(self):
         if self._client is None:
-            import openai
-            from dotenv import load_dotenv
+            from .llm_client import make_openai_compatible_client
 
-            load_dotenv()
-            if not os.environ.get("OPENAI_API_KEY"):
-                raise RuntimeError(
-                    "OPENAI_API_KEY is not set (looked in process env and "
-                    "repo-root .env via python-dotenv); Agent.act needs it "
-                    "to call gpt-4o-mini."
-                )
-            self._client = openai.OpenAI(
+            self._client, config = make_openai_compatible_client(
+                model=self.model,
+                role="AGENT",
                 max_retries=self.max_retries,
-                timeout=self.request_timeout,
+                request_timeout=self.request_timeout,
             )
+            self.model = config.model
         return self._client
 
     def build_user_message(self, query: str, retrieved: List[MemoryEntry]) -> str:

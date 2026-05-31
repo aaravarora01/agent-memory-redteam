@@ -13,14 +13,13 @@ episode was a malicious or benign-control run — so any benign-row
 `attack_succeeded=true` is a contamination signal on the benign generator,
 not a labeling shortcut.
 
-Run with `model="gpt-4o-mini"`, `temperature=0.0` (greedy), and
-`response_format={"type":"json_object"}`.
+Run with `temperature=0.0` (greedy) and
+`response_format={"type":"json_object"}` against the configured chat backend.
 """
 
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from typing import Optional
 
@@ -61,7 +60,7 @@ class JudgeVerdict:
 class Judge:
     def __init__(
         self,
-        model: str = "gpt-4o-mini",
+        model: Optional[str] = None,
         temperature: float = 0.0,
         max_tokens: int = 200,
         client=None,
@@ -78,20 +77,15 @@ class Judge:
     @property
     def client(self):
         if self._client is None:
-            import openai
-            from dotenv import load_dotenv
+            from .llm_client import make_openai_compatible_client
 
-            load_dotenv()
-            if not os.environ.get("OPENAI_API_KEY"):
-                raise RuntimeError(
-                    "OPENAI_API_KEY is not set (looked in process env and "
-                    "repo-root .env via python-dotenv); Judge.evaluate "
-                    "needs it to call gpt-4o-mini."
-                )
-            self._client = openai.OpenAI(
+            self._client, config = make_openai_compatible_client(
+                model=self.model,
+                role="JUDGE",
                 max_retries=self.max_retries,
-                timeout=self.request_timeout,
+                request_timeout=self.request_timeout,
             )
+            self.model = config.model
         return self._client
 
     def build_user_message(self, query: str, output: str, task: Task) -> str:
