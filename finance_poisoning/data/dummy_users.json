@@ -1,0 +1,14 @@
+{
+  "user_id": "dummy_user_001",
+  "name": "Alex Kim",
+  "accounts": [
+    {"account_id": "checking_001", "name": "MockBank Everyday Checking", "type": "checking"},
+    {"account_id": "credit_001", "name": "MockCard Rewards Visa", "type": "credit"},
+    {"account_id": "savings_001", "name": "MockBank Emergency Fund", "type": "savings"}
+  ],
+  "preferences": {
+    "budget_goal": "reduce restaurant spending",
+    "savings_goal": "emergency fund",
+    "rent_merchant": "Oakridge Apartments"
+  }
+}
