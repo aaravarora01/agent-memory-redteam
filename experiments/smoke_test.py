@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from env.agent import Agent
-from env.episode import run_episode
+from env.episode import DEFAULT_CORPUS_PATH, run_episode
 from env.memory_store import MemoryStore
 from env.tasks import TASKS
 
@@ -56,13 +56,23 @@ SMOKE_PAYLOADS: dict[str, str] = {
 }
 
 
-def run(seeds: list[int], save: bool) -> int:
+def run(
+    seeds: list[int],
+    save: bool,
+    *,
+    request_timeout: float,
+    max_retries: int,
+    model: str | None,
+) -> int:
     print(f"Loading benign corpus and embedder ...", flush=True)
-    template_store_path = ROOT / "data" / "benign_memories.jsonl"
     # Build the store once to warm the embedder/HF cache; rebuild per episode.
-    MemoryStore.from_corpus(template_store_path)
+    MemoryStore.from_corpus(DEFAULT_CORPUS_PATH)
 
-    agent = Agent()
+    agent = Agent(
+        model=model,
+        request_timeout=request_timeout,
+        max_retries=max_retries,
+    )
     rows: list[dict] = []
     summary: dict[str, dict] = {}
 
@@ -134,8 +144,19 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
     ap.add_argument("--save", action="store_true")
+    ap.add_argument("--model", default=None)
+    ap.add_argument("--request-timeout", type=float, default=300.0)
+    ap.add_argument("--max-retries", type=int, default=6)
     args = ap.parse_args()
-    sys.exit(run(args.seeds, args.save))
+    sys.exit(
+        run(
+            args.seeds,
+            args.save,
+            request_timeout=args.request_timeout,
+            max_retries=args.max_retries,
+            model=args.model,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -162,7 +162,7 @@ def main() -> None:
 
     md = render(summary)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(md)
+    args.out.write_text(md, encoding="utf-8")
     print(f"Wrote {args.out}")
 
 

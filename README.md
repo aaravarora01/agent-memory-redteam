@@ -102,6 +102,38 @@ Expected baseline (gpt-4o-mini, the committed seed corpus):
 
 T1/T2 not reaching 5/5 is the *expected* stealth-vs-ASR variance the §2.1 sweep is designed to characterize, not a bug. Note also that small score differences vs. the cached embedded corpus are normal — embedder outputs are deterministic per model but can vary slightly across builds.
 
+## Deadline Workflow
+
+If you need the shortest reliable path to interpretable results, start with
+[`DEADLINE_RUNBOOK.md`](DEADLINE_RUNBOOK.md). It separates the no-API finance
+simulator from the live LLM experiments and lists the exact commands to run in
+order. To regenerate a one-page local status report from existing artifacts:
+
+```bash
+python scripts/deadline_report.py
+```
+
+The report is written to `results/deadline_report.md`.
+For the no-API finance benchmark, the one-command runner is:
+
+```bash
+python scripts/run_offline_finance.py --episodes 500
+```
+
+For later Modal/Qwen live runs, validate `.env` first:
+
+```bash
+python scripts/check_modal_ready.py --profile simulation
+```
+
+Then run live simulation and training through the guarded launchers:
+
+```bash
+python scripts/run_live_simulation.py --mode dryrun
+python scripts/run_live_simulation.py --mode exp1 --n 20
+python scripts/run_training.py --mode live-exp3 --plot
+```
+
 ## PISmith-Style Environment Adapter
 
 This repo exposes the persistent-memory testbed in the same dataset/reward shape used by [PISmith](https://github.com/albert-y1n/PISmith):

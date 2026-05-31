@@ -106,6 +106,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--n-slots", type=int, default=DEFAULT_N_SLOTS)
     p.add_argument("--vocab-size", type=int, default=DEFAULT_VOCAB_SIZE)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--agent-model", default=None)
+    p.add_argument(
+        "--request-timeout",
+        type=float,
+        default=300.0,
+        help="Seconds per target-agent request; use 300 for Modal cold starts.",
+    )
+    p.add_argument("--max-retries", type=int, default=6)
     p.add_argument("--lr", type=float, default=3e-4)
     p.add_argument("--clip-eps", type=float, default=0.2)
     p.add_argument("--ppo-epochs", type=int, default=4)
@@ -173,7 +181,11 @@ def main() -> int:
 
     embedder = _load_default_embedder()
     store_factory = _StoreFactory(args.corpus, embedder)
-    agent = Agent()
+    agent = Agent(
+        model=args.agent_model,
+        request_timeout=args.request_timeout,
+        max_retries=args.max_retries,
+    )
 
     # Constant observation for this contextual-bandit MDP.
     obs = torch.zeros(1, dtype=torch.float32)

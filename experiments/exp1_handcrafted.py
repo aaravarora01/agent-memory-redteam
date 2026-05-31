@@ -54,7 +54,7 @@ DEFAULT_N = 20
 
 def _load_pairs(path: Path) -> list[dict]:
     rows: list[dict] = []
-    with path.open() as f:
+    with path.open(encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
@@ -172,6 +172,10 @@ def run_sweep(
     k: int = 5,
     resume: bool = True,
     pair_filter: Optional[set[str]] = None,
+    agent_model: str | None = None,
+    judge_model: str | None = None,
+    request_timeout: float = 300.0,
+    max_retries: int = 6,
 ) -> None:
     pairs = _load_pairs(seeds_path)
     if pair_filter:
@@ -190,15 +194,23 @@ def run_sweep(
     # eat the JSON-parse cost in its timing.
     MemoryStore.from_corpus(corpus_path, embedder=embedder)
 
-    agent = Agent()
-    judge = Judge()
+    agent = Agent(
+        model=agent_model,
+        request_timeout=request_timeout,
+        max_retries=max_retries,
+    )
+    judge = Judge(
+        model=judge_model,
+        request_timeout=request_timeout,
+        max_retries=max_retries,
+    )
 
     conditions = ("malicious", "benign")
     total = len(pairs) * len(conditions) * n
     skipped = 0
     written = 0
 
-    log_f = episodes_path.open("a", buffering=1)  # line-buffered for crash-resilience
+    log_f = episodes_path.open("a", buffering=1, encoding="utf-8")  # line-buffered for crash-resilience
     try:
         for pair in pairs:
             for condition in conditions:
@@ -242,7 +254,7 @@ def run_sweep(
 
 def _write_summary(episodes_path: Path, summary_path: Path, n: int) -> None:
     rows = []
-    with episodes_path.open() as f:
+    with episodes_path.open(encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
@@ -329,7 +341,7 @@ def _write_summary(episodes_path: Path, summary_path: Path, n: int) -> None:
         "by_stealth": by_stealth_out,
     }
     summary_path.parent.mkdir(parents=True, exist_ok=True)
-    with summary_path.open("w") as f:
+    with summary_path.open("w", encoding="utf-8") as f:
         json.dump(out, f, indent=2)
     print(f"Wrote summary → {summary_path}", file=sys.stderr)
 
@@ -348,6 +360,15 @@ def main() -> None:
     ap.add_argument("--episodes-out", type=Path, default=EPISODES_PATH)
     ap.add_argument("--summary-out", type=Path, default=SUMMARY_PATH)
     ap.add_argument("--k", type=int, default=5)
+    ap.add_argument("--agent-model", default=None)
+    ap.add_argument("--judge-model", default=None)
+    ap.add_argument(
+        "--request-timeout",
+        type=float,
+        default=300.0,
+        help="Seconds per chat request; use 300 for Modal cold starts.",
+    )
+    ap.add_argument("--max-retries", type=int, default=6)
     ap.add_argument("--no-resume", action="store_true",
                     help="ignore existing episode log; will overwrite incrementally")
     ap.add_argument("--pairs", nargs="*", default=None,
@@ -373,6 +394,10 @@ def main() -> None:
         k=args.k,
         resume=not args.no_resume,
         pair_filter=pair_filter,
+        agent_model=args.agent_model,
+        judge_model=args.judge_model,
+        request_timeout=args.request_timeout,
+        max_retries=args.max_retries,
     )
 
 

@@ -123,6 +123,12 @@ def _flags(summary: dict) -> list[str]:
 
 
 def main() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except AttributeError:
+            pass
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--baseline", type=Path, default=BASELINE_SUMMARY)
     ap.add_argument("--exp1", type=Path, default=EXP1_SUMMARY)
@@ -174,7 +180,7 @@ def main() -> None:
     out.append("")
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text("\n".join(out))
+    args.out.write_text("\n".join(out), encoding="utf-8")
     print(f"Wrote {args.out}", file=sys.stderr)
     print("\n".join(out))
 
