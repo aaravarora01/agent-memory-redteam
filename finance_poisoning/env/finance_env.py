@@ -30,6 +30,7 @@ from ..rl.action_space import decode_poison_action
 
 
 RewardMode = Literal["sparse", "shaped"]
+AgentBackend = Literal["heuristic", "qwen"]
 
 
 @dataclass
@@ -113,6 +114,10 @@ class FinanceMemoryPoisonEnv:
         tools: Optional[FinanceTools] = None,
         memory_path: Path | str = DATA_DIR / "clean_memories.jsonl",
         backend: Optional[str] = None,
+        agent_backend: AgentBackend = "heuristic",
+        agent_model: Optional[str] = None,
+        request_timeout: float = 300.0,
+        max_retries: int = 6,
         seed: int = 0,
     ):
         self.mode = mode
@@ -123,8 +128,20 @@ class FinanceMemoryPoisonEnv:
         self.tools = tools or FinanceTools.from_data()
         self.memory_path = Path(memory_path)
         self.backend = backend
+        self.agent_backend = agent_backend
         self.rng = random.Random(seed)
-        self.agent = HeuristicFinanceAgent()
+        if agent_backend == "heuristic":
+            self.agent = HeuristicFinanceAgent()
+        elif agent_backend == "qwen":
+            from .qwen_agent import QwenFinanceAgent
+
+            self.agent = QwenFinanceAgent(
+                model=agent_model,
+                request_timeout=request_timeout,
+                max_retries=max_retries,
+            )
+        else:
+            raise ValueError("agent_backend must be 'heuristic' or 'qwen'")
         self._episode = 0
         self._target_fact_id: Optional[str] = None
         self._query: Optional[FinanceQuery] = None
@@ -208,21 +225,35 @@ class FinanceMemoryPoisonEnv:
         tool_calls: list[str] = []
         tool_value = None
         final_answer_value = None
+        final_answer_text = None
+        answer_source = None
         answer_uses_poison = None
         answer_contradicts_tool = None
 
         if self.mode != EnvMode.RETRIEVAL_ONLY.value:
-            answer = self.agent.answer(
-                self._query, hits, self.tools, self.mode, self.rng
-            )
+            if self.agent_backend == "qwen":
+                answer = self.agent.answer(
+                    self._query, hits, self.tools, self.mode, self.user
+                )
+            else:
+                answer = self.agent.answer(
+                    self._query, hits, self.tools, self.mode, self.rng
+                )
             tool_calls = answer.tool_calls
             tool_value = answer.tool_value
             final_answer_value = answer.final_answer_value
+            final_answer_text = answer.final_answer_text
+            answer_source = answer.source
             ans_score = score_answer(
                 answer, poison.poison_value, true_value, tool_value
             )
             answer_uses_poison = ans_score["answer_uses_poison"]
             answer_contradicts_tool = ans_score["answer_contradicts_tool"]
+            answer_success = bool(answer_uses_poison or answer_contradicts_tool)
+            if rm == "sparse":
+                reward = 1.0 if answer_success else 0.0
+            else:
+                reward = retrieval.shaped_reward + (1.0 if answer_success else 0.0)
 
         obs = {
             "target_fact_id": self._target_fact_id,
@@ -235,11 +266,14 @@ class FinanceMemoryPoisonEnv:
             "truth_score": retrieval.truth_score,
             "poison_ranks_above_truth": retrieval.poison_ranks_above_truth,
             "truth_displaced": retrieval.truth_displaced,
+            "answer_uses_poison": answer_uses_poison,
+            "answer_contradicts_tool": answer_contradicts_tool,
         }
 
         info = {
             "query": self._query.query_text,
             "retrieved_memory_ids": [h.memory_id for h in hits],
+            "retrieved_memory_texts": [h.text for h in hits],
             "retrieval_score": retrieval,
             "poison_value": poison.poison_value,
             "true_value": true_value,
@@ -248,6 +282,8 @@ class FinanceMemoryPoisonEnv:
             "tool_calls": tool_calls,
             "tool_value": tool_value,
             "final_answer_value": final_answer_value,
+            "final_answer_text": final_answer_text,
+            "answer_source": answer_source,
             "answer_uses_poison": answer_uses_poison,
             "answer_contradicts_tool": answer_contradicts_tool,
         }
@@ -275,6 +311,7 @@ class FinanceMemoryPoisonEnv:
             poison_style=action.framing_style,
             query=info["query"],
             retrieved_memory_ids=info["retrieved_memory_ids"],
+            retrieved_memory_texts=info["retrieved_memory_texts"],
             poison_rank=retrieval.poison_rank,
             truth_rank=retrieval.truth_rank,
             poison_in_top5=retrieval.poison_in_top_k,
@@ -287,6 +324,8 @@ class FinanceMemoryPoisonEnv:
             tool_calls=info["tool_calls"],
             tool_value=info["tool_value"],
             final_answer_value=info["final_answer_value"],
+            final_answer_text=info["final_answer_text"],
+            answer_source=info["answer_source"],
             answer_uses_poison=info["answer_uses_poison"],
             answer_contradicts_tool=info["answer_contradicts_tool"],
         )

@@ -75,6 +75,27 @@ def _smoke_test(args: argparse.Namespace) -> int:
     return _run("Live end-to-end smoke test", cmd)
 
 
+def _finance_qwen(args: argparse.Namespace) -> int:
+    cmd = [
+        "finance_poisoning/experiments/f5_qwen_victim.py",
+        "--limit",
+        str(args.finance_limit),
+        "--mode",
+        args.finance_mode,
+        "--reward-mode",
+        args.finance_reward_mode,
+        "--request-timeout",
+        str(args.request_timeout),
+        "--max-retries",
+        str(args.max_retries),
+        "--seed",
+        str(args.seed),
+    ]
+    if args.agent_model:
+        cmd.extend(["--agent-model", args.agent_model])
+    return _run("Finance Qwen victim dry run", cmd)
+
+
 def _exp1_dryrun(args: argparse.Namespace) -> int:
     cmd = [
         "experiments/exp1_handcrafted.py",
@@ -141,16 +162,21 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--mode",
-        choices=["dryrun", "smoke", "exp1", "baseline", "all"],
+        choices=["dryrun", "smoke", "finance-qwen", "exp1", "baseline", "all"],
         default="dryrun",
         help="dryrun is intentionally small; exp1/baseline/all can spend real API time.",
     )
     parser.add_argument("--n", type=int, default=2, help="Episodes per pair/condition.")
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--pairs", nargs="+", default=["pair_001"])
     parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1])
     parser.add_argument("--reward-mode", choices=["terminal", "retrieval", "composite"], default="composite")
+    parser.add_argument("--finance-mode", choices=["tool_optional", "tool_forced"], default="tool_optional")
+    parser.add_argument("--finance-reward-mode", choices=["sparse", "shaped"], default="sparse")
+    parser.add_argument("--finance-limit", type=int, default=1)
     parser.add_argument("--request-timeout", type=float, default=300.0)
     parser.add_argument("--max-retries", type=int, default=6)
+    parser.add_argument("--agent-model", default=None)
     parser.add_argument("--skip-ready-check", action="store_true")
     args = parser.parse_args()
 
@@ -159,18 +185,21 @@ def main() -> int:
         return code
 
     if args.mode == "dryrun":
-        for step in (_pismith_live, _exp1_dryrun):
+        for step in (_pismith_live, _finance_qwen, _exp1_dryrun):
             code = step(args)
             if code != 0:
                 return code
         return 0
 
     if args.mode == "smoke":
-        for step in (_pismith_live, _smoke_test):
+        for step in (_pismith_live, _finance_qwen, _smoke_test):
             code = step(args)
             if code != 0:
                 return code
         return 0
+
+    if args.mode == "finance-qwen":
+        return _finance_qwen(args)
 
     if args.mode == "exp1":
         return _exp1_full(args)
@@ -179,7 +208,7 @@ def main() -> int:
         return _baseline_full(args)
 
     if args.mode == "all":
-        for step in (_pismith_live, _smoke_test, _exp1_full, _baseline_full):
+        for step in (_pismith_live, _finance_qwen, _smoke_test, _exp1_full, _baseline_full):
             code = step(args)
             if code != 0:
                 return code

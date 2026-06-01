@@ -76,6 +76,7 @@ Then run:
 
 ```bash
 python experiments/pismith_env_smoke.py --run-episode --reward-mode composite --request-timeout 300
+python scripts/run_live_simulation.py --mode finance-qwen --finance-limit 1
 ```
 
 The first live request can take several minutes while Modal starts the container
@@ -202,6 +203,7 @@ configs/
   pismith_memory.yaml     # adapter defaults
 scripts/
   modal_qwen25_vllm.py    # Modal vLLM server for Qwen2.5
+  run_live_simulation.py  # live Modal/Qwen dry runs and sweeps
 data/
   build_benign_corpus.py     # §1.2 generator
   benign_memories.seed.jsonl # committed text-only seed (re-embed at load)

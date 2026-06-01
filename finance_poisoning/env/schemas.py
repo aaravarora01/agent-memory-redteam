@@ -235,6 +235,7 @@ class EpisodeResult:
     poison_style: str
     query: str
     retrieved_memory_ids: list[str]
+    retrieved_memory_texts: list[str]
     poison_rank: Optional[int]
     truth_rank: Optional[int]
     poison_in_top5: bool
@@ -247,6 +248,8 @@ class EpisodeResult:
     tool_calls: list[str] = field(default_factory=list)
     tool_value: Optional[Any] = None
     final_answer_value: Optional[Any] = None
+    final_answer_text: Optional[str] = None
+    answer_source: Optional[str] = None
     answer_uses_poison: Optional[bool] = None
     answer_contradicts_tool: Optional[bool] = None
 
