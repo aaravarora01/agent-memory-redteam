@@ -10,6 +10,10 @@ results/*.csv
 results/*.jsonl
 results/*.log
 
+# GRPO training run outputs (checkpoints + train_metrics.jsonl). On Modal these
+# live on the pismith-outputs Volume; a local run writes them here.
+outputs/
+
 # Milestone-figure exceptions: pin these so teammates / the report can
 # reference a specific git revision without rerunning the sweep.
 !results/exp3_curve.png

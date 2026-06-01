@@ -1,0 +1,16 @@
+# GRPO training stack for rl/train_pismith_grpo.py. Kept OUT of the default
+# requirements.txt so the base cs224r env stays free of the CUDA/vLLM stack
+# (per CLAUDE.md). Install into a dedicated GPU env, or rely on the Modal image
+# in scripts/modal_train_grpo.py which pins the same versions.
+#
+#   pip install -r requirements.txt -r requirements-train.txt   # GPU box only
+
+trl>=0.14.0
+transformers>=4.48.0
+datasets>=3.0.0
+peft>=0.13.0
+accelerate>=1.2.0
+vllm>=0.10.0
+pyyaml>=6.0
+# torch / sentence-transformers / faiss-cpu / numpy / python-dotenv come from
+# the base requirements.txt.

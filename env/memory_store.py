@@ -30,10 +30,12 @@ class MemoryEntry:
     score: float = 0.0
 
 
-def _load_default_embedder():
+def _load_default_embedder(device=None):
     from sentence_transformers import SentenceTransformer
 
-    return SentenceTransformer(EMBED_MODEL)
+    # device=None lets sentence-transformers auto-select (CUDA if present).
+    # Pass "cpu" to keep the encoder off a GPU that's busy with training/vLLM.
+    return SentenceTransformer(EMBED_MODEL, device=device)
 
 
 class MemoryStore:

@@ -75,6 +75,7 @@ def run_episode(
     corpus_path: str | Path = DEFAULT_CORPUS_PATH,
     payload_metadata: Optional[dict] = None,
     retrieval_filter: Optional[Callable[[List[MemoryEntry]], List[MemoryEntry]]] = None,
+    embedder=None,
 ) -> EpisodeResult:
     """Run one ingest → query → retrieve → act episode.
 
@@ -104,9 +105,14 @@ def run_episode(
         entries the agent is allowed to see (e.g. dropping adversarial-looking
         memories). `payload_in_topk` still reflects raw retrieval; the new
         `payload_reached_agent` reflects what survived the filter.
+    embedder:
+        Optional shared sentence-transformer passed to `MemoryStore.from_corpus`
+        when a fresh store is built. Callers that run many episodes (e.g. the
+        PISmith GRPO reward) pass one cached encoder so each episode does not
+        lazy-load its own MiniLM. Ignored when `store` is supplied.
     """
     if store is None:
-        store = MemoryStore.from_corpus(corpus_path)
+        store = MemoryStore.from_corpus(corpus_path, embedder=embedder)
     if agent is None:
         agent = Agent()
 

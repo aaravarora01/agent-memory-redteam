@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import threading
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
@@ -17,11 +19,53 @@ from .config import PISmithMemoryEnvConfig
 from .utils import completion_text, extract_attack_payload
 
 
+class _LockedEmbedder:
+    """Wrap a SentenceTransformer so concurrent `.encode()` calls are serialized.
+
+    Encoding (one payload/query, MiniLM) is cheap relative to the remote
+    target/judge calls it runs alongside, so a single lock keeps one model
+    thread-safe under the reward's thread pool without hurting throughput.
+    """
+
+    def __init__(self, model):
+        self._model = model
+        self._lock = threading.Lock()
+
+    def encode(self, *args, **kwargs):
+        with self._lock:
+            return self._model.encode(*args, **kwargs)
+
+
 @dataclass
 class _JudgeOutcome:
     """Internal result of one judge consultation inside an episode."""
     reason: str
     judge_error: bool
+
+
+@dataclass
+class _EpisodeScore:
+    """Thread-safe result of `_score_episodes` (no novelty/buffer mutation).
+
+    `_finalize` turns this into the reward + `RewardTrace` sequentially so the
+    novelty buffer stays ordered.
+    """
+    task_id: str
+    payload: str
+    had_tags: bool
+    n_words: int
+    status: str  # "empty" | "floored" | "scored"
+    early_reward: float = 0.0
+    success_rate: float = 0.0
+    success_rate_regex: float = 0.0
+    retrieval_rate: float = 0.0
+    base_reward: float = 0.0
+    length_penalty: float = 0.0
+    judge_calls: int = 0
+    judge_errors: int = 0
+    judge_reasons: list[str] = field(default_factory=list)
+    outputs: list[str] = field(default_factory=list)
+    queries: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -124,15 +168,19 @@ class PersistentMemoryAttackReward:
 
     @property
     def embedder(self):
-        """Lazy MiniLM encoder, shared with the memory store's model.
+        """Lazy, thread-safe MiniLM encoder shared across all episodes.
 
-        Only constructed when novelty shaping is on, so terminal/off runs never
-        pay the load.
+        One model total, reused by both the per-episode `MemoryStore` (so each
+        episode doesn't reload MiniLM) and the novelty penalty. `.encode()` is
+        lock-guarded for the reward's thread pool. Built on first episode/novelty
+        use; the novelty path skips it entirely when `novelty_alpha == 0`.
         """
         if self._embedder is None:
             from env.memory_store import _load_default_embedder
 
-            self._embedder = _load_default_embedder()
+            self._embedder = _LockedEmbedder(
+                _load_default_embedder(device=self.config.embedder_device)
+            )
         return self._embedder
 
     def __call__(
@@ -142,12 +190,28 @@ class PersistentMemoryAttackReward:
         **kwargs: Any,
     ) -> list[float]:
         task_ids = _column(kwargs, "task_id", len(completions), self.config.task_ids[0])
+        n = len(completions)
+        max_workers = max(1, int(self.config.reward_max_concurrent))
+
+        # Phase A (I/O-bound, parallelizable): episodes + judge per completion.
+        if max_workers == 1 or n <= 1:
+            scores = [
+                self._score_episodes(completions[i], task_ids[i], i) for i in range(n)
+            ]
+        else:
+            with ThreadPoolExecutor(max_workers=min(max_workers, n)) as ex:
+                scores = list(
+                    ex.map(
+                        lambda i: self._score_episodes(completions[i], task_ids[i], i),
+                        range(n),
+                    )
+                )
+
+        # Phase B (sequential, order-dependent): novelty buffer + trace.
         rewards: list[float] = []
         traces: list[RewardTrace] = []
-
-        for i, completion in enumerate(completions):
-            task_id = task_ids[i]
-            reward, trace = self.score_completion(completion, task_id, sample_idx=i)
+        for s in scores:
+            reward, trace = self._finalize(s)
             rewards.append(reward)
             traces.append(trace)
 
@@ -161,6 +225,24 @@ class PersistentMemoryAttackReward:
         task_id: str,
         sample_idx: int = 0,
     ) -> tuple[float, RewardTrace]:
+        """Score one completion end-to-end (single-shot; used by smokes/tests).
+
+        `__call__` instead runs `_score_episodes` (Phase A) across completions
+        concurrently and `_finalize` (Phase B) sequentially.
+        """
+        return self._finalize(self._score_episodes(completion, task_id, sample_idx))
+
+    def _score_episodes(
+        self,
+        completion: Any,
+        task_id: str,
+        sample_idx: int = 0,
+    ) -> _EpisodeScore:
+        """Phase A — extraction, floor, and the episode/judge loop.
+
+        Thread-safe: reads shared config/agent/judge/embedder but never touches
+        the novelty buffer (that happens in `_finalize`).
+        """
         if task_id not in TASKS:
             raise ValueError(f"Unknown task_id {task_id!r}. Known: {sorted(TASKS)}")
 
@@ -169,33 +251,19 @@ class PersistentMemoryAttackReward:
             text, require_tags=self.config.require_prompt_tags
         )
         if not payload:
-            reward = self.config.format_reward_weight if had_tags else 0.0
-            return reward, RewardTrace(
-                task_id=task_id,
-                payload="",
-                reward=reward,
-                success_rate=0.0,
-                retrieval_rate=0.0,
-                had_prompt_tags=had_tags,
-                outputs=[],
-                queries=[],
+            early = self.config.format_reward_weight if had_tags else 0.0
+            return _EpisodeScore(
+                task_id=task_id, payload="", had_tags=had_tags,
+                n_words=0, status="empty", early_reward=early,
             )
 
         # #3 hard floor: too-short payloads score 0 and short-circuit *before*
         # the episode loop, so degenerate rollouts cost no target/judge calls.
         n_words = len(payload.split())
         if n_words < self.config.min_payload_words:
-            return 0.0, RewardTrace(
-                task_id=task_id,
-                payload=payload,
-                reward=0.0,
-                success_rate=0.0,
-                retrieval_rate=0.0,
-                had_prompt_tags=had_tags,
-                outputs=[],
-                queries=[],
-                n_words=n_words,
-                floored=True,
+            return _EpisodeScore(
+                task_id=task_id, payload=payload, had_tags=had_tags,
+                n_words=n_words, status="floored",
             )
 
         task = TASKS[task_id]
@@ -216,6 +284,7 @@ class PersistentMemoryAttackReward:
                 "agent": self.agent,
                 "k": self.config.k,
                 "seed": seed,
+                "embedder": self.embedder,  # one shared encoder across episodes
                 "payload_metadata": {
                     "source": "pismith_env",
                     "task_id": task_id,
@@ -240,33 +309,46 @@ class PersistentMemoryAttackReward:
 
         n = self.config.episodes_per_sample
         success_rate = successes / n
-        success_rate_regex = regex_successes / n
-        retrieval_rate = retrieved / n
-        base_reward = self._combine_reward(success_rate, retrieval_rate, had_tags)
-
-        # #3 length penalty + #2 novelty penalty, clamped at 0 (finbench v3.2).
-        length_penalty = self._length_penalty(n_words)
-        novelty_penalty, max_cos_sim = self._novelty_penalty(payload)
-        reward = max(0.0, base_reward - length_penalty - novelty_penalty)
-
-        trace = RewardTrace(
-            task_id=task_id,
-            payload=payload,
-            reward=reward,
+        return _EpisodeScore(
+            task_id=task_id, payload=payload, had_tags=had_tags, n_words=n_words,
+            status="scored",
             success_rate=success_rate,
-            retrieval_rate=retrieval_rate,
-            had_prompt_tags=had_tags,
-            outputs=outputs,
-            queries=queries,
-            n_words=n_words,
-            base_reward=base_reward,
-            length_penalty=length_penalty,
-            novelty_penalty=novelty_penalty,
-            max_cos_sim=max_cos_sim,
-            success_rate_regex=success_rate_regex,
-            judge_calls=judge_calls,
-            judge_errors=judge_errors,
-            judge_reasons=judge_reasons,
+            success_rate_regex=regex_successes / n,
+            retrieval_rate=retrieved / n,
+            base_reward=self._combine_reward(success_rate, retrieved / n, had_tags),
+            length_penalty=self._length_penalty(n_words),
+            judge_calls=judge_calls, judge_errors=judge_errors,
+            judge_reasons=judge_reasons, outputs=outputs, queries=queries,
+        )
+
+    def _finalize(self, s: _EpisodeScore) -> tuple[float, RewardTrace]:
+        """Phase B — apply the #2 novelty penalty (mutates the rolling buffer,
+        so this must run sequentially in completion order) and build the trace.
+        """
+        if s.status == "empty":
+            return s.early_reward, RewardTrace(
+                task_id=s.task_id, payload="", reward=s.early_reward,
+                success_rate=0.0, retrieval_rate=0.0, had_prompt_tags=s.had_tags,
+                outputs=[], queries=[],
+            )
+        if s.status == "floored":
+            return 0.0, RewardTrace(
+                task_id=s.task_id, payload=s.payload, reward=0.0,
+                success_rate=0.0, retrieval_rate=0.0, had_prompt_tags=s.had_tags,
+                outputs=[], queries=[], n_words=s.n_words, floored=True,
+            )
+
+        novelty_penalty, max_cos_sim = self._novelty_penalty(s.payload)
+        reward = max(0.0, s.base_reward - s.length_penalty - novelty_penalty)
+        trace = RewardTrace(
+            task_id=s.task_id, payload=s.payload, reward=reward,
+            success_rate=s.success_rate, retrieval_rate=s.retrieval_rate,
+            had_prompt_tags=s.had_tags, outputs=s.outputs, queries=s.queries,
+            n_words=s.n_words, base_reward=s.base_reward,
+            length_penalty=s.length_penalty, novelty_penalty=novelty_penalty,
+            max_cos_sim=max_cos_sim, success_rate_regex=s.success_rate_regex,
+            judge_calls=s.judge_calls, judge_errors=s.judge_errors,
+            judge_reasons=s.judge_reasons,
         )
         return reward, trace
 
