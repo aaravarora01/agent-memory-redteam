@@ -30,6 +30,17 @@ retrieval_reward_weight: 0.25
 format_reward_weight: 0.0
 require_prompt_tags: true
 
+# Success signal driving the reward (see env/judge.py).
+#   regex  : task.success_check only (default; no judge calls).
+#   judge  : LLM judge every episode — faithful, ~2x API cost.
+#   hybrid : judge only when regex fires, success = regex AND judge — drops
+#            regex false positives at cost ~= ASR-fraction of episodes.
+# Recommend hybrid for training, judge for the final/eval run.
+success_signal: regex
+judge_model: null            # null → defer to JUDGE_MODEL / LLM_MODEL
+judge_request_timeout: 60.0  # bump for Modal cold starts
+judge_max_retries: 6
+
 # Reward shaping (finbench-style; off by default — set these for a GRPO run).
 # #3 anti-degenerate: floor kills empty/too-short reward-hacking modes (a
 # sub-floor payload scores 0 and is skipped before any target/judge call);

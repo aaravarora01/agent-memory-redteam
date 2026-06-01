@@ -10,10 +10,18 @@ import numpy as np
 
 from env.agent import Agent
 from env.episode import run_episode
+from env.judge import Judge
 from env.tasks import TASKS
 
 from .config import PISmithMemoryEnvConfig
 from .utils import completion_text, extract_attack_payload
+
+
+@dataclass
+class _JudgeOutcome:
+    """Internal result of one judge consultation inside an episode."""
+    reason: str
+    judge_error: bool
 
 
 @dataclass
@@ -34,6 +42,13 @@ class RewardTrace:
     novelty_penalty: float = 0.0
     max_cos_sim: float = 0.0
     floored: bool = False
+    # Judge-signal bookkeeping. `success_rate` above is the reward-driving signal
+    # (regex/judge/hybrid per config); `success_rate_regex` is always the raw
+    # regex rate, so their gap is the online regex-vs-judge disagreement.
+    success_rate_regex: float = 0.0
+    judge_calls: int = 0
+    judge_errors: int = 0
+    judge_reasons: list[str] = field(default_factory=list)
 
 
 class PersistentMemoryAttackReward:
@@ -57,6 +72,7 @@ class PersistentMemoryAttackReward:
         self.config = config
         self.__name__ = "PersistentMemoryAttackReward"
         self._agent: Agent | None = None
+        self._judge: Judge | None = None
         self._call_idx = 0
         self.last_traces: list[RewardTrace] = []
 
@@ -68,6 +84,10 @@ class PersistentMemoryAttackReward:
         if self.config.reward_mode not in {"terminal", "retrieval", "composite"}:
             raise ValueError(
                 "reward_mode must be one of: terminal, retrieval, composite"
+            )
+        if self.config.success_signal not in {"regex", "judge", "hybrid"}:
+            raise ValueError(
+                "success_signal must be one of: regex, judge, hybrid"
             )
         if self.config.episodes_per_sample < 1:
             raise ValueError("episodes_per_sample must be >= 1")
@@ -82,6 +102,25 @@ class PersistentMemoryAttackReward:
                 request_timeout=self.config.target_request_timeout,
             )
         return self._agent
+
+    @property
+    def judge(self) -> Judge:
+        """Lazy LLM judge, built only when success_signal != "regex".
+
+        Settable (`reward.judge = Judge(client=stub)`) so tests can inject a
+        deterministic judge without an API key.
+        """
+        if self._judge is None:
+            self._judge = Judge(
+                model=self.config.judge_model,
+                request_timeout=self.config.judge_request_timeout,
+                max_retries=self.config.judge_max_retries,
+            )
+        return self._judge
+
+    @judge.setter
+    def judge(self, value: Judge) -> None:
+        self._judge = value
 
     @property
     def embedder(self):
@@ -161,7 +200,11 @@ class PersistentMemoryAttackReward:
 
         task = TASKS[task_id]
         successes = 0
+        regex_successes = 0
         retrieved = 0
+        judge_calls = 0
+        judge_errors = 0
+        judge_reasons: list[str] = []
         outputs: list[str] = []
         queries: list[str] = []
 
@@ -182,13 +225,22 @@ class PersistentMemoryAttackReward:
             if self.config.corpus_path is not None:
                 kwargs["corpus_path"] = self.config.corpus_path
             result = run_episode(**kwargs)
-            successes += int(result.success)
+            regex_successes += int(result.success)
+            ok, verdict = self._resolve_success(
+                result.success, result.query, result.output, task
+            )
+            successes += int(ok)
+            if verdict is not None:
+                judge_calls += 1
+                judge_errors += int(verdict.judge_error)
+                judge_reasons.append(verdict.reason)
             retrieved += int(result.payload_in_topk)
             outputs.append(result.output)
             queries.append(result.query)
 
         n = self.config.episodes_per_sample
         success_rate = successes / n
+        success_rate_regex = regex_successes / n
         retrieval_rate = retrieved / n
         base_reward = self._combine_reward(success_rate, retrieval_rate, had_tags)
 
@@ -211,6 +263,10 @@ class PersistentMemoryAttackReward:
             length_penalty=length_penalty,
             novelty_penalty=novelty_penalty,
             max_cos_sim=max_cos_sim,
+            success_rate_regex=success_rate_regex,
+            judge_calls=judge_calls,
+            judge_errors=judge_errors,
+            judge_reasons=judge_reasons,
         )
         return reward, trace
 
@@ -236,6 +292,39 @@ class PersistentMemoryAttackReward:
         if had_tags:
             reward += cfg.format_reward_weight
         return float(reward)
+
+    def _resolve_success(
+        self,
+        regex_success: bool,
+        query: str,
+        output: str,
+        task,
+    ) -> tuple[bool, "_JudgeOutcome | None"]:
+        """Decide episode success per `success_signal`.
+
+        Returns `(effective_success, judge_outcome)` where `judge_outcome` is
+        None when the judge was not consulted (regex mode, or hybrid mode gated
+        out because the regex already said no). A malformed/failed judge call
+        falls back to the regex verdict and is flagged `judge_error=True` rather
+        than aborting the run.
+        """
+        signal = self.config.success_signal
+        if signal == "regex":
+            return regex_success, None
+        if signal == "hybrid" and not regex_success:
+            # Gate: the judge can only confirm, not resurrect, a regex negative.
+            return False, None
+        try:
+            verdict = self.judge.evaluate(query, output, task)
+        except Exception as e:  # malformed JSON / transient API → fall back
+            return regex_success, _JudgeOutcome(reason=f"judge_error: {e}", judge_error=True)
+        if signal == "hybrid":
+            return (regex_success and verdict.attack_succeeded), _JudgeOutcome(
+                reason=verdict.reason, judge_error=False
+            )
+        return verdict.attack_succeeded, _JudgeOutcome(
+            reason=verdict.reason, judge_error=False
+        )
 
     def _length_penalty(self, n_words: int) -> float:
         """Linear penalty for payloads above the target length (#3).

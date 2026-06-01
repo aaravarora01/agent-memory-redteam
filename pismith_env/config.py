@@ -38,6 +38,16 @@ class PISmithMemoryEnvConfig:
     format_reward_weight: float = 0.0
     require_prompt_tags: bool = True
 
+    # Success signal driving the reward. "regex" uses task.success_check only
+    # (default → unchanged behavior, no judge calls). "judge" calls the LLM
+    # judge every episode (faithful but ~2x API cost). "hybrid" calls the judge
+    # only when the regex fires and requires both (regex AND judge) — removes
+    # regex false positives at cost ~= ASR-fraction of episodes. See env/judge.py.
+    success_signal: str = "regex"        # "regex" | "judge" | "hybrid"
+    judge_model: Optional[str] = None    # None → defer to JUDGE_MODEL / LLM_MODEL
+    judge_request_timeout: float = 60.0  # bump for Modal cold starts
+    judge_max_retries: int = 6
+
     # Reward shaping (ported from the finbench GRPO loop). All default to
     # no-ops so existing callers see byte-identical rewards; set the
     # recommended training values from configs/pismith_memory.yaml for a run.

@@ -70,6 +70,72 @@ def shaping_demo(task_id: str) -> int:
     return 0
 
 
+class _StubJudge:
+    """Deterministic judge for offline tests (duck-types env.judge.Judge)."""
+
+    def __init__(self, attack_succeeded: bool, raise_exc: bool = False):
+        self.attack_succeeded = attack_succeeded
+        self.raise_exc = raise_exc
+        self.calls = 0
+
+    def evaluate(self, query, output, task):
+        self.calls += 1
+        if self.raise_exc:
+            raise ValueError("stub judge failure")
+        from env.judge import JudgeVerdict
+
+        return JudgeVerdict(
+            aligned_with_user=True,
+            attack_succeeded=self.attack_succeeded,
+            reason="stub verdict",
+        )
+
+
+def judge_demo(task_id: str) -> int:
+    """Offline checks for the regex/judge/hybrid success-signal logic."""
+    task = TASKS[task_id]
+
+    def resolve(signal, regex_success, judge_says, raise_exc=False):
+        reward = PersistentMemoryAttackReward(
+            PISmithMemoryEnvConfig(task_ids=(task_id,), success_signal=signal)
+        )
+        stub = _StubJudge(judge_says, raise_exc=raise_exc)
+        reward.judge = stub
+        ok, outcome = reward._resolve_success(regex_success, "q", "out", task)
+        return ok, outcome, stub.calls
+
+    # regex mode: judge never consulted, regex passes through.
+    ok, outcome, calls = resolve("regex", True, judge_says=False)
+    assert ok is True and outcome is None and calls == 0
+    ok, outcome, calls = resolve("regex", False, judge_says=True)
+    assert ok is False and outcome is None and calls == 0
+    print("regex: passes regex through, judge never called  OK")
+
+    # hybrid: gate on regex; require regex AND judge.
+    ok, _, calls = resolve("hybrid", False, judge_says=True)
+    assert ok is False and calls == 0, "hybrid must not call judge on regex-negative"
+    ok, _, calls = resolve("hybrid", True, judge_says=False)
+    assert ok is False and calls == 1, "hybrid must drop regex false-positive"
+    ok, _, calls = resolve("hybrid", True, judge_says=True)
+    assert ok is True and calls == 1
+    print("hybrid: gates on regex, drops false positives (regex AND judge)  OK")
+
+    # judge mode: judge alone, can catch a paraphrase the regex missed.
+    ok, _, calls = resolve("judge", False, judge_says=True)
+    assert ok is True and calls == 1, "judge mode must catch regex-negative success"
+    ok, _, calls = resolve("judge", True, judge_says=False)
+    assert ok is False and calls == 1
+    print("judge: judge-only, catches paraphrase regex missed  OK")
+
+    # error fallback: a raising judge falls back to regex, flagged judge_error.
+    ok, outcome, _ = resolve("judge", True, judge_says=False, raise_exc=True)
+    assert ok is True and outcome is not None and outcome.judge_error is True
+    print("error fallback: raising judge falls back to regex, flagged  OK")
+
+    print("judge_demo=OK")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", default="T1_brand_hijack", choices=sorted(TASKS))
@@ -91,6 +157,20 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--judge-demo",
+        action="store_true",
+        help=(
+            "Offline (no API) check of the regex/judge/hybrid success-signal "
+            "logic using an injected stub judge. No network calls."
+        ),
+    )
+    parser.add_argument(
+        "--success-signal",
+        default="regex",
+        choices=["regex", "judge", "hybrid"],
+        help="Success signal for --run-episode scoring.",
+    )
+    parser.add_argument(
         "--request-timeout",
         type=float,
         default=300.0,
@@ -100,6 +180,9 @@ def main() -> int:
 
     if args.shaping_demo:
         return shaping_demo(args.task)
+
+    if args.judge_demo:
+        return judge_demo(args.task)
 
     dataset = PersistentMemoryDataset(task_ids=(args.task,))
     sample = dataset[0]
@@ -124,6 +207,8 @@ def main() -> int:
             reward_mode=args.reward_mode,
             episodes_per_sample=1,
             target_request_timeout=args.request_timeout,
+            success_signal=args.success_signal,
+            judge_request_timeout=args.request_timeout,
         )
     )
     scores = reward(
