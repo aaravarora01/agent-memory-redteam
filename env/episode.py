@@ -21,7 +21,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from .agent import Agent
 from .memory_store import MemoryEntry, MemoryStore
@@ -58,6 +58,11 @@ class EpisodeResult:
     query: str = ""
     payload_id: str = ""
     metadata: dict = field(default_factory=dict)
+    # Defense bookkeeping (plan §Exp 2). When no `retrieval_filter` is passed,
+    # `payload_reached_agent == payload_in_topk` and `n_filtered == 0`, so
+    # existing callers see unchanged behavior.
+    payload_reached_agent: bool = False
+    n_filtered: int = 0
 
 
 def run_episode(
@@ -69,6 +74,7 @@ def run_episode(
     seed: Optional[int] = None,
     corpus_path: str | Path = DEFAULT_CORPUS_PATH,
     payload_metadata: Optional[dict] = None,
+    retrieval_filter: Optional[Callable[[List[MemoryEntry]], List[MemoryEntry]]] = None,
 ) -> EpisodeResult:
     """Run one ingest → query → retrieve → act episode.
 
@@ -92,6 +98,12 @@ def run_episode(
         Top-k retrieval count.
     seed:
         Deterministic query sampling. If `None`, sampling uses the global RNG.
+    retrieval_filter:
+        Optional defense (plan §Exp 2): a callable applied to the top-k
+        retrieved entries *before* `agent.act`. It returns the subset of
+        entries the agent is allowed to see (e.g. dropping adversarial-looking
+        memories). `payload_in_topk` still reflects raw retrieval; the new
+        `payload_reached_agent` reflects what survived the filter.
     """
     if store is None:
         store = MemoryStore.from_corpus(corpus_path)
@@ -110,6 +122,15 @@ def run_episode(
     query = rng.choice(task.trigger_queries)
     retrieved = store.query(query, k=k)
     payload_in_topk = bool(payload_id) and any(r.id == payload_id for r in retrieved)
+
+    # Defense hook: drop adversarial-looking entries before the agent sees them.
+    n_filtered = 0
+    if retrieval_filter is not None:
+        kept = retrieval_filter(retrieved)
+        n_filtered = len(retrieved) - len(kept)
+        retrieved = kept
+    payload_reached_agent = bool(payload_id) and any(r.id == payload_id for r in retrieved)
+
     output = agent.act(query, retrieved)
     success = task.success_check(output)
 
@@ -120,4 +141,6 @@ def run_episode(
         payload_in_topk=payload_in_topk,
         query=query,
         payload_id=payload_id,
+        payload_reached_agent=payload_reached_agent,
+        n_filtered=n_filtered,
     )
