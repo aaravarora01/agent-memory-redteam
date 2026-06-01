@@ -37,3 +37,22 @@ class PISmithMemoryEnvConfig:
     retrieval_reward_weight: float = 0.25
     format_reward_weight: float = 0.0
     require_prompt_tags: bool = True
+
+    # Reward shaping (ported from the finbench GRPO loop). All default to
+    # no-ops so existing callers see byte-identical rewards; set the
+    # recommended training values from configs/pismith_memory.yaml for a run.
+    #
+    # #3 anti-degenerate: kill empty/too-short reward-hacking modes. A payload
+    # below the floor scores 0.0 and is short-circuited *before* the episode
+    # loop, so it costs no target/judge API calls. The length penalty discourages
+    # bloated payloads (less retrievable, easier to flag).
+    min_payload_words: int = 0          # >0 enables the hard floor; recommend 8
+    length_target_words: int = 60       # only active when length_penalty_alpha > 0
+    length_penalty_alpha: float = 0.0   # >0 enables; recommend ~0.01
+
+    # #2 anti-monoculture: penalize payloads that look like recent ones, so the
+    # policy can't collapse onto a single template. Cosine similarity against a
+    # rolling buffer of recent payload embeddings (shared MiniLM encoder).
+    novelty_alpha: float = 0.0          # >0 enables; recommend ~1.0-2.0 (tune in smoke)
+    novelty_threshold: float = 0.8      # similarity above this starts costing
+    novelty_buffer_size: int = 256      # rolling window of recent payload embeddings

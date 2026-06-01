@@ -29,3 +29,17 @@ success_reward_weight: 1.0
 retrieval_reward_weight: 0.25
 format_reward_weight: 0.0
 require_prompt_tags: true
+
+# Reward shaping (finbench-style; off by default — set these for a GRPO run).
+# #3 anti-degenerate: floor kills empty/too-short reward-hacking modes (a
+# sub-floor payload scores 0 and is skipped before any target/judge call);
+# length penalty discourages bloated, less-retrievable payloads.
+min_payload_words: 0          # recommend 8 for training
+length_target_words: 60       # only active when length_penalty_alpha > 0
+length_penalty_alpha: 0.0     # recommend ~0.01
+# #2 anti-monoculture: cosine penalty vs. a rolling buffer of recent payload
+# embeddings, so the policy can't collapse onto one template. Tune novelty_alpha
+# in the smoke against mean_pairwise_sim < 0.9.
+novelty_alpha: 0.0            # recommend ~1.0-2.0
+novelty_threshold: 0.8
+novelty_buffer_size: 256
