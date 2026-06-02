@@ -4,19 +4,19 @@ This report is generated offline from local artifacts. It is meant to answer: wh
 
 ## Environment
 
-- Python: `3.13.5` at `C:\Python313\python.exe`
-- Platform: `Windows-11-10.0.26200-SP0`
-- Repo `.env`: missing
+- Python: `3.11.15` at `/opt/anaconda3/envs/cs224r/bin/python`
+- Platform: `macOS-14.4-arm64-arm-64bit`
+- Repo `.env`: present
 - numpy: OK
 - scikit-learn: OK
 - pytest: OK
 - matplotlib: OK
-- sentence-transformers: MISSING
-- faiss-cpu: MISSING
-- tiktoken: MISSING
+- sentence-transformers: OK
+- faiss-cpu: OK
+- tiktoken: OK
 - torch: OK
 - python-dotenv: OK
-- Git status: 16 changed/untracked paths
+- Git status: 1 changed/untracked paths
 
 ## Persistent-memory LLM Track
 
@@ -39,7 +39,7 @@ Published-attack baseline (`results/baseline_summary.json`):
 
 ## Finance Simulator Track
 
-- F0 clean sanity: 32 queries, TruthRetention@5=97%, Tool accuracy=100%
+- F0 clean sanity: 32 queries, TruthRetention@5=94%, Tool accuracy=100%
 
 F1 hand-crafted poison by framing style:
 
@@ -53,8 +53,8 @@ Policy baselines:
 
 | Run | Episodes | Mean reward | IRR@5 | Last-50 reward |
 |-----|----------|-------------|-------|----------------|
-| F2 sparse random | 500 | 0.02 | 2% | 0.02 |
-| F3 shaped epsilon-greedy | 500 | 0.71 | 14% | 0.79 |
+| F2 sparse random | 50 | 0.06 | 6% | 0.06 |
+| F3 shaped epsilon-greedy | 50 | 0.46 | 8% | 0.46 |
 
 F4 answer-level defense comparison:
 

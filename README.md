@@ -155,6 +155,38 @@ End-to-end reward smoke (requires `QWEN_API_KEY`/`DASHSCOPE_API_KEY` because it 
 python experiments/pismith_env_smoke.py --run-episode --reward-mode composite --request-timeout 300
 ```
 
+## Finance GRPO + Qwen Victim Training
+
+The finance pipeline now has the same attacker-training shape: an attacker LLM
+generates structured `<action>{...}</action>` JSON, `FinancePoisonReward` decodes
+it into a `PoisonAction`, runs `FinanceMemoryPoisonEnv(agent_backend="qwen")`,
+and rewards the rollout when the Qwen victim uses the poisoned value or
+contradicts authoritative tool facts. Optional `success_signal: judge` or
+`hybrid` calls the strict-JSON finance judge.
+
+Before a full run, use the quick checks:
+
+```bash
+# Offline parser/dataset/import checks:
+python -m compileall finance_poisoning/grpo finance_poisoning/env/judge.py finance_poisoning/rl/train_finance_grpo.py
+
+# Live victim dry run against the deployed Qwen endpoint:
+python finance_poisoning/experiments/f5_qwen_victim.py --limit 1 --request-timeout 300
+
+# One-step GRPO smoke. This calls the Qwen victim once for preflight, then trains
+# for one step with the smoke overrides in configs/finance_grpo.yaml.
+python finance_poisoning/rl/train_finance_grpo.py --config configs/finance_grpo.yaml --smoke
+```
+
+Modal run sequence:
+
+```bash
+modal deploy scripts/modal_qwen25_vllm.py
+modal run scripts/modal_train_finance_grpo.py --smoke
+modal run scripts/modal_train_finance_grpo.py
+modal run scripts/modal_train_finance_grpo.py --beta0
+```
+
 ## Run Experiment 1 (plan §2.1 – §2.3)
 
 Three steps — payload seeds, sweep, tabulate. Steps 1 and 2 hit the OpenAI API; step 3 is offline.
