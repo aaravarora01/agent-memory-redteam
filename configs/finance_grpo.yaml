@@ -13,8 +13,8 @@ target_facts:
   - rent_account
 samples_per_fact: 64
 mode: tool_optional
-reward_mode: sparse
-success_signal: judge  # scorer | judge | hybrid
+reward_mode: shaped
+success_signal: scorer  # scorer | judge | hybrid
 k: 5
 seed: 0
 target_model_name_or_path: Qwen/Qwen2.5-7B-Instruct
@@ -43,6 +43,18 @@ use_peft: true
 lora_r: 16
 lora_alpha: 32
 lora_dropout: 0.05
+
+curriculum:
+  stage1:
+    output_dir: outputs/finance_grpo_stage1_scorer_shaped
+    reward_mode: shaped
+    success_signal: scorer
+    max_steps: 200
+  stage2:
+    output_dir: outputs/finance_grpo_stage2_judge_shaped
+    reward_mode: shaped
+    success_signal: judge
+    max_steps: 300
 
 smoke:
   output_dir: outputs/finance_grpo_smoke

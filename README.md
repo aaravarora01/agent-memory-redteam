@@ -183,8 +183,34 @@ Modal run sequence:
 ```bash
 modal deploy scripts/modal_qwen25_vllm.py
 modal run scripts/modal_train_finance_grpo.py --smoke
-modal run scripts/modal_train_finance_grpo.py
-modal run scripts/modal_train_finance_grpo.py --beta0
+
+# Stage 1 preflight: same stage settings, isolated short output dir.
+modal run scripts/modal_train_finance_grpo.py \
+  --stage stage1 \
+  --max-steps 2 \
+  --run-suffix preflight
+
+# Stage 1: dense curriculum warmup (scorer + shaped retrieval reward).
+modal run scripts/modal_train_finance_grpo.py --stage stage1
+
+# Pull stage-1 metrics:
+modal volume get finance-grpo-outputs finance_grpo_stage1_scorer_shaped/train_metrics.jsonl .
+
+# Stage 2: resume from stage 1 and train on judged shaped reward
+modal run scripts/modal_train_finance_grpo.py \
+  --stage stage2 \
+  --resume-from-checkpoint /outputs/finance_grpo_stage1_scorer_shaped/checkpoint-200
+
+# Pull stage-2 metrics:
+modal volume get finance-grpo-outputs finance_grpo_stage2_judge_shaped/train_metrics.jsonl .
+
+# Judge-only evaluation of a checkpoint:
+modal run scripts/modal_eval_finance_grpo.py \
+  --checkpoint finance_grpo_stage2_judge_shaped/checkpoint-100 \
+  --n 10 \
+  --success-signal judge \
+  --reward-mode sparse
+modal volume get finance-grpo-outputs evals/finance_grpo_stage2_judge_shaped_checkpoint-100_eval_summary.json .
 ```
 
 ## Run Experiment 1 (plan §2.1 – §2.3)

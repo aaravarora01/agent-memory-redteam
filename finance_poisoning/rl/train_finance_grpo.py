@@ -25,17 +25,29 @@ _GRPO_KEYS = [
 ]
 
 
-def load_config(path: Path, smoke: bool, beta0: bool) -> dict[str, Any]:
+def load_config(
+    path: Path,
+    smoke: bool,
+    beta0: bool,
+    stage: str | None = None,
+) -> dict[str, Any]:
     import yaml
 
     cfg = yaml.safe_load(Path(path).read_text())
     smoke_overrides = cfg.pop("smoke", {}) or {}
+    curriculum = cfg.pop("curriculum", {}) or {}
+    if stage:
+        if stage not in curriculum:
+            raise ValueError(
+                f"Unknown stage {stage!r}. Known stages: {sorted(curriculum)}"
+            )
+        cfg.update(curriculum[stage] or {})
     if smoke:
         cfg.update(smoke_overrides)
-        cfg["output_dir"] = cfg.get("output_dir", "outputs/finance_grpo") + "_smoke"
+        cfg["output_dir"] = str(cfg.get("output_dir", "outputs/finance_grpo")) + "_smoke"
     if beta0:
         cfg["beta"] = 0.0
-        cfg["output_dir"] = cfg.get("output_dir", "outputs/finance_grpo") + "_beta0"
+        cfg["output_dir"] = str(cfg.get("output_dir", "outputs/finance_grpo")) + "_beta0"
     return cfg
 
 
@@ -89,7 +101,12 @@ def build_peft_config(cfg: dict[str, Any]):
     )
 
 
-def make_monitor_callback(reward: FinancePoisonReward, metrics_path=None):
+def make_monitor_callback(
+    reward: FinancePoisonReward,
+    metrics_path=None,
+    checkpoint_commit_every: int = 0,
+    commit_callback=None,
+):
     from transformers import TrainerCallback
 
     sink = Path(metrics_path) if metrics_path else None
@@ -124,6 +141,12 @@ def make_monitor_callback(reward: FinancePoisonReward, metrics_path=None):
             if sink is not None:
                 with sink.open("a") as f:
                     f.write(json.dumps(row) + "\n")
+            if (
+                commit_callback is not None
+                and checkpoint_commit_every > 0
+                and state.global_step % checkpoint_commit_every == 0
+            ):
+                commit_callback()
 
     return MonitorCallback()
 
@@ -151,12 +174,20 @@ def main() -> int:
     ap.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--beta0", action="store_true")
+    ap.add_argument("--stage", choices=["stage1", "stage2"], default=None)
     ap.add_argument("--output-dir", default=None)
+    ap.add_argument("--resume-from-checkpoint", default=None)
+    ap.add_argument("--max-steps", type=int, default=None)
+    ap.add_argument("--checkpoint-commit-every", type=int, default=0)
     args = ap.parse_args()
 
-    cfg = load_config(args.config, args.smoke, args.beta0)
+    cfg = load_config(args.config, args.smoke, args.beta0, stage=args.stage)
     if args.output_dir:
         cfg["output_dir"] = args.output_dir
+    if args.resume_from_checkpoint:
+        cfg["resume_from_checkpoint"] = args.resume_from_checkpoint
+    if args.max_steps is not None:
+        cfg["max_steps"] = args.max_steps
 
     env_cfg = build_env_config(cfg)
     reward = FinancePoisonReward(env_cfg)
@@ -173,7 +204,8 @@ def main() -> int:
         f"[train-finance] policy={cfg['policy_model']} steps={cfg.get('max_steps')} "
         f"G={cfg.get('num_generations')} reward={env_cfg.reward_mode} "
         f"signal={env_cfg.success_signal} beta={cfg.get('beta')} "
-        f"peft={bool(peft_config)} rows={len(dataset)}",
+        f"peft={bool(peft_config)} rows={len(dataset)} "
+        f"resume={cfg.get('resume_from_checkpoint')}",
         flush=True,
     )
 
@@ -184,10 +216,13 @@ def main() -> int:
         train_dataset=dataset,
         peft_config=peft_config,
         callbacks=[make_monitor_callback(
-            reward, metrics_path=Path(cfg["output_dir"]) / "train_metrics.jsonl"
+            reward,
+            metrics_path=Path(cfg["output_dir"]) / "train_metrics.jsonl",
+            checkpoint_commit_every=args.checkpoint_commit_every,
+            commit_callback=cfg.get("commit_callback"),
         )],
     )
-    trainer.train()
+    trainer.train(resume_from_checkpoint=cfg.get("resume_from_checkpoint"))
     trainer.save_model(cfg["output_dir"])
     print(f"[train-finance] done. saved to {cfg['output_dir']}", flush=True)
     return 0

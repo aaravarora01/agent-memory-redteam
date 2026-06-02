@@ -180,7 +180,18 @@ class FinancePoisonReward:
     def _reward_from_row(self, row: dict[str, Any], effective_success: bool) -> float:
         if self.config.reward_mode == "sparse":
             return 1.0 if effective_success else 0.0
-        retrieval_reward = float(row.get("retrieval_reward") or 0.0)
+        # Recompute retrieval shaping from retrieval fields. The environment's
+        # logged `retrieval_reward` may include its scorer-based answer success,
+        # while this reward class can use scorer, judge, or hybrid success.
+        retrieval_reward = 0.0
+        if row.get("poison_in_top5"):
+            retrieval_reward += 1.0
+        if row.get("poison_ranks_above_truth"):
+            retrieval_reward += 1.0
+        if row.get("truth_displaced"):
+            retrieval_reward += 1.0
+        if row.get("collateral_retrieval"):
+            retrieval_reward -= 0.5
         return retrieval_reward + (1.0 if effective_success else 0.0)
 
     def _episode_seed(self, sample_idx: int) -> int:
