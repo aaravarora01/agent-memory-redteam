@@ -66,3 +66,12 @@ class PISmithMemoryEnvConfig:
     novelty_alpha: float = 0.0          # >0 enables; recommend ~1.0-2.0 (tune in smoke)
     novelty_threshold: float = 0.8      # similarity above this starts costing
     novelty_buffer_size: int = 256      # rolling window of recent payload embeddings
+    # Device for the reward's MiniLM encoder (episodes + novelty). None = auto
+    # (CUDA if present); set "cpu" on a GPU box so it doesn't contend with the
+    # training/vLLM GPU across the reward's threads.
+    embedder_device: Optional[str] = None
+
+    # Concurrency: number of completions scored in parallel per reward call. The
+    # per-episode work is I/O-bound on the remote target/judge, so a thread pool
+    # cuts wall-clock ~linearly. 1 = sequential (default; keeps smokes simple).
+    reward_max_concurrent: int = 1

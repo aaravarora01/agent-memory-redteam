@@ -133,13 +133,16 @@ class ChatClient:
                 time.sleep(min(2**attempt, 8))
         raise RuntimeError(f"chat completion failed after retries: {last_error}") from last_error
 
-    def _post_chat_completion(self, payload: dict[str, Any]):
+    def _post_chat_completion(self, payload: dict[str, Any], base_url: Optional[str] = None):
+        # `base_url` is passed explicitly (never mutated on self) so the client
+        # is safe to share across the reward's thread pool.
+        base = (base_url or self.base_url).rstrip("/")
         body = json.dumps(payload).encode("utf-8")
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
         }
-        url = f"{self.base_url}/chat/completions"
+        url = f"{base}/chat/completions"
         req = request.Request(url, data=body, headers=headers, method="POST")
         try:
             with request.urlopen(req, timeout=self.timeout) as resp:
@@ -147,10 +150,8 @@ class ChatClient:
         except error.HTTPError as e:
             # Modal root URLs need `/v1`; retry once with that suffix to turn a
             # common configuration mistake into a working request.
-            if e.code == 404 and not _base_url_has_v1(self.base_url):
-                return self._post_chat_completion_with_base(
-                    f"{self.base_url}/v1", payload
-                )
+            if e.code == 404 and not _base_url_has_v1(base):
+                return self._post_chat_completion(payload, base_url=f"{base}/v1")
             detail = e.read().decode("utf-8", errors="replace")
             raise RuntimeError(
                 f"chat backend returned HTTP {e.code} for {url}: {detail}"
@@ -160,14 +161,6 @@ class ChatClient:
                 f"chat backend timed out after {self.timeout}s at {url}"
             ) from e
         return _to_completion_response(data)
-
-    def _post_chat_completion_with_base(self, base_url: str, payload: dict[str, Any]):
-        original = self.base_url
-        try:
-            self.base_url = base_url.rstrip("/")
-            return self._post_chat_completion(payload)
-        finally:
-            self.base_url = original
 
 
 def _base_url_has_v1(base_url: str) -> bool:

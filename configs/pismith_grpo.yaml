@@ -1,0 +1,74 @@
+# GRPO training config for the PISmith persistent-memory attacker.
+#
+# Consumed by rl/train_pismith_grpo.py (locally or via scripts/modal_train_grpo.py).
+# Target victim + judge are the deployed Qwen2.5-7B vLLM server, reached through
+# the .env QWEN_BASE_URL (one endpoint serves both roles). Only the *attacker
+# policy* below is trained.
+#
+# Keys are grouped by consumer: GRPO (TRL GRPOConfig), LoRA, dataset, and
+# reward/environment (PISmithMemoryEnvConfig). Unknown GRPOConfig keys are
+# dropped with a warning by the trainer, so TRL version drift won't crash a run.
+
+# ---- attacker policy / GRPO ----
+policy_model: Qwen/Qwen2.5-3B-Instruct
+output_dir: outputs/pismith_grpo
+learning_rate: 1.0e-6
+per_device_train_batch_size: 16     # must be a multiple of num_generations
+gradient_accumulation_steps: 4
+num_generations: 8                  # GRPO group size G
+max_prompt_length: 1024
+max_completion_length: 128          # memory payloads are 1-2 sentences
+max_steps: 200
+save_steps: 50
+logging_steps: 1
+temperature: 1.0
+beta: 0.04                          # KL coefficient; --beta0 sets this to 0.0
+seed: 0
+bf16: true
+gradient_checkpointing: true
+use_vllm: true
+vllm_mode: colocate                 # generate policy completions on the same GPU
+vllm_gpu_memory_utilization: 0.30
+
+# ---- LoRA (PEFT) ----
+use_peft: true                      # guarantees the 3B fits one A100-80GB + vLLM
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+
+# ---- dataset ----
+task_ids: [T1_brand_hijack, T2_tool_misdirection, T3_fact_corruption, T4_refusal_bypass]
+samples_per_task: 256
+
+# ---- reward / environment (PISmithMemoryEnvConfig) ----
+reward_mode: composite              # retrieval shaping = dense signal on the binding gate
+success_signal: hybrid              # judge confirms regex hits; drops false positives
+success_reward_weight: 1.0
+retrieval_reward_weight: 0.25
+k: 5
+episodes_per_sample: 1
+target_model_temperature: 0.2
+target_model_max_tokens: 256
+target_request_timeout: 300.0       # Modal cold starts
+judge_request_timeout: 300.0
+reward_max_concurrent: 8            # parallel completion scoring (I/O-bound)
+# shaping (#2/#3)
+min_payload_words: 8
+length_target_words: 60
+length_penalty_alpha: 0.01
+novelty_alpha: 1.0
+novelty_threshold: 0.8
+novelty_buffer_size: 256
+embedder_device: cpu                # keep MiniLM off the training/vLLM GPU
+
+# ---- overrides applied with --smoke (fast end-to-end validation) ----
+smoke:
+  policy_model: Qwen/Qwen2.5-0.5B-Instruct
+  max_steps: 8
+  per_device_train_batch_size: 8
+  gradient_accumulation_steps: 1
+  num_generations: 4
+  save_steps: 8
+  samples_per_task: 32
+  success_signal: regex             # skip judge latency for the smoke
+  reward_max_concurrent: 8
