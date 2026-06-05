@@ -1,7 +1,7 @@
 {
-  "n": 6,
-  "reward_rate": 0.8333333333333334,
+  "n": 1,
+  "reward_rate": 0.0,
   "answer_uses_poison_rate": 0.0,
   "answer_contradicts_tool_rate": 0.0,
-  "poison_in_top5_rate": 0.6666666666666666
+  "poison_in_top5_rate": 1.0
 }

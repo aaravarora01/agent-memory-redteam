@@ -155,6 +155,64 @@ End-to-end reward smoke (requires `QWEN_API_KEY`/`DASHSCOPE_API_KEY` because it 
 python experiments/pismith_env_smoke.py --run-episode --reward-mode composite --request-timeout 300
 ```
 
+## Finance GRPO + Qwen Victim Training
+
+The finance pipeline now has the same attacker-training shape: an attacker LLM
+generates structured `<action>{...}</action>` JSON, `FinancePoisonReward` decodes
+it into a `PoisonAction`, runs `FinanceMemoryPoisonEnv(agent_backend="qwen")`,
+and rewards the rollout when the Qwen victim uses the poisoned value or
+contradicts authoritative tool facts. Optional `success_signal: judge` or
+`hybrid` calls the strict-JSON finance judge.
+
+Before a full run, use the quick checks:
+
+```bash
+# Offline parser/dataset/import checks:
+python -m compileall finance_poisoning/grpo finance_poisoning/env/judge.py finance_poisoning/rl/train_finance_grpo.py
+
+# Live victim dry run against the deployed Qwen endpoint:
+python finance_poisoning/experiments/f5_qwen_victim.py --limit 1 --request-timeout 300
+
+# One-step GRPO smoke. This calls the Qwen victim once for preflight, then trains
+# for one step with the smoke overrides in configs/finance_grpo.yaml.
+python finance_poisoning/rl/train_finance_grpo.py --config configs/finance_grpo.yaml --smoke
+```
+
+Modal run sequence:
+
+```bash
+modal deploy scripts/modal_qwen25_vllm.py
+modal run scripts/modal_train_finance_grpo.py --smoke
+
+# Stage 1 preflight: same stage settings, isolated short output dir.
+modal run scripts/modal_train_finance_grpo.py \
+  --stage stage1 \
+  --max-steps 2 \
+  --run-suffix preflight
+
+# Stage 1: dense curriculum warmup (scorer + shaped retrieval reward).
+modal run scripts/modal_train_finance_grpo.py --stage stage1
+
+# Pull stage-1 metrics:
+modal volume get finance-grpo-outputs finance_grpo_stage1_scorer_shaped/train_metrics.jsonl .
+
+# Stage 2: resume from stage 1 and train on judged shaped reward
+modal run scripts/modal_train_finance_grpo.py \
+  --stage stage2 \
+  --resume-from-checkpoint /outputs/finance_grpo_stage1_scorer_shaped/checkpoint-200
+
+# Pull stage-2 metrics:
+modal volume get finance-grpo-outputs finance_grpo_stage2_judge_shaped/train_metrics.jsonl .
+
+# Judge-only evaluation of a checkpoint:
+modal run scripts/modal_eval_finance_grpo.py \
+  --checkpoint finance_grpo_stage2_judge_shaped/checkpoint-100 \
+  --n 10 \
+  --success-signal judge \
+  --reward-mode sparse
+modal volume get finance-grpo-outputs evals/finance_grpo_stage2_judge_shaped_checkpoint-100_eval_summary.json .
+```
+
 ## Run Experiment 1 (plan §2.1 – §2.3)
 
 Three steps — payload seeds, sweep, tabulate. Steps 1 and 2 hit the OpenAI API; step 3 is offline.
