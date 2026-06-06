@@ -213,6 +213,25 @@ modal run scripts/modal_eval_finance_grpo.py \
 modal volume get finance-grpo-outputs evals/finance_grpo_stage2_judge_shaped_checkpoint-100_eval_summary.json .
 ```
 
+If eval judge ASR is still zero, run the context ablation before retraining:
+
+```bash
+python finance_poisoning/experiments/f6_qwen_ablate_context.py \
+  --queries-per-fact 2 \
+  --actions-per-fact 2 \
+  --request-timeout 300
+```
+
+This compares the normal Qwen victim prompt against `no_profile`, `no_tools`,
+`no_clean_truth`, and combined ablations using fixed non-degenerate probe
+attacks. Outputs are written to
+`finance_poisoning/results/f6_qwen_ablation_episodes.jsonl`,
+`finance_poisoning/results/f6_qwen_ablation_summary.json`, and
+`finance_poisoning/results/f6_qwen_ablation_summary.md`. If `no_tools` is the
+first arm to show judge success, authoritative tool facts are the likely
+blocker; if only `minimal_context` succeeds, the issue is combined truth
+grounding from profile + tools + clean memories.
+
 ## Run Experiment 1 (plan §2.1 – §2.3)
 
 Three steps — payload seeds, sweep, tabulate. Steps 1 and 2 hit the OpenAI API; step 3 is offline.
