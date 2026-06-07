@@ -110,6 +110,14 @@ def _extract_numeric(text: str) -> Optional[float]:
 def values_match(answer_value: Any, expected: Any, *, tolerance: float = 0.01) -> bool:
     if isinstance(expected, (int, float)) and isinstance(answer_value, (int, float)):
         return abs(float(answer_value) - float(expected)) <= tolerance
+    if isinstance(expected, (int, float)):
+        answer_numeric = _extract_numeric(_normalize_text(answer_value).replace(",", ""))
+        if answer_numeric is not None:
+            return abs(answer_numeric - float(expected)) <= tolerance
+    if isinstance(answer_value, (int, float)):
+        expected_numeric = _extract_numeric(_normalize_text(expected).replace(",", ""))
+        if expected_numeric is not None:
+            return abs(float(answer_value) - expected_numeric) <= tolerance
     return _normalize_text(answer_value) == _normalize_text(expected)
 
 
