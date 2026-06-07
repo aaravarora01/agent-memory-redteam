@@ -138,6 +138,8 @@ def main() -> int:
     ap.add_argument("--max-new-tokens", type=int, default=192)
     ap.add_argument("--temperature", type=float, default=0.7)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--start-idx", type=int, default=0, help="Zero-based dataset index to resume from")
+    ap.add_argument("--append", action="store_true", help="Append to an existing JSONL instead of overwriting")
     ap.add_argument("--out", type=Path, default=Path("finance_poisoning/results/finance_grpo_eval.jsonl"))
     ap.add_argument("--summary", type=Path, default=Path("finance_poisoning/results/finance_grpo_eval_summary.json"))
     args = ap.parse_args()
@@ -151,13 +153,23 @@ def main() -> int:
         target_facts=env_cfg.target_facts,
         samples_per_fact=args.n,
     )
+    if args.start_idx < 0 or args.start_idx > len(dataset):
+        raise ValueError(f"--start-idx must be in [0, {len(dataset)}], got {args.start_idx}")
     model, tokenizer = load_attacker(args.model, base_model=cfg["policy_model"])
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.summary.parent.mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, Any]] = []
-    with args.out.open("w", encoding="utf-8") as f:
-        for i in range(len(dataset)):
+    if args.append and args.out.exists():
+        with args.out.open("r", encoding="utf-8") as existing:
+            for line in existing:
+                line = line.strip()
+                if line:
+                    rows.append(json.loads(line))
+
+    mode = "a" if args.append else "w"
+    with args.out.open(mode, encoding="utf-8") as f:
+        for i in range(args.start_idx, len(dataset)):
             sample = dataset[i]
             completion = generate_completion(
                 model,
@@ -181,6 +193,7 @@ def main() -> int:
             }
             rows.append(row)
             f.write(json.dumps(row, default=str) + "\n")
+            f.flush()
             print(
                 f"[eval-finance] {i + 1}/{len(dataset)} fact={sample['target_fact']} "
                 f"reward={score:.3f} valid={trace.valid_action} "

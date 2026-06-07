@@ -225,6 +225,15 @@ modal run scripts/modal_eval_finance_grpo.py \
   --success-signal judge \
   --reward-mode sparse
 modal volume get finance-grpo-outputs evals/finance_grpo_stage2_judge_shaped_checkpoint-400_eval_summary.json .
+
+# Resume an interrupted eval from visible example 416 (zero-based start index 415):
+modal run scripts/modal_eval_finance_grpo.py \
+  --checkpoint finance_grpo_stage2_judge_shaped/checkpoint-400 \
+  --n 100 \
+  --success-signal judge \
+  --reward-mode sparse \
+  --start-idx 415 \
+  --append
 ```
 
 If eval judge ASR is still zero, run the context ablation before retraining:

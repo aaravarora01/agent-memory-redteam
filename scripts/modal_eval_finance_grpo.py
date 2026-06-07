@@ -69,6 +69,8 @@ def evaluate(
     success_signal: str = "judge",
     reward_mode: str = "sparse",
     temperature: float = 0.7,
+    start_idx: int = 0,
+    append: bool = False,
 ) -> None:
     os.chdir("/root/repo")
     sys.path.insert(0, "/root/repo")
@@ -85,9 +87,12 @@ def evaluate(
         "--success-signal", success_signal,
         "--reward-mode", reward_mode,
         "--temperature", str(temperature),
+        "--start-idx", str(start_idx),
         "--out", f"/outputs/evals/{safe_name}_eval.jsonl",
         "--summary", f"/outputs/evals/{safe_name}_eval_summary.json",
     ]
+    if append:
+        argv.append("--append")
     if stage:
         argv.extend(["--stage", stage])
 
@@ -108,6 +113,8 @@ def cli(
     success_signal: str = "judge",
     reward_mode: str = "sparse",
     temperature: float = 0.7,
+    start_idx: int = 0,
+    append: bool = False,
 ) -> None:
     evaluate.remote(
         checkpoint=checkpoint,
@@ -116,4 +123,6 @@ def cli(
         success_signal=success_signal,
         reward_mode=reward_mode,
         temperature=temperature,
+        start_idx=start_idx,
+        append=append,
     )
