@@ -113,11 +113,14 @@ class FinanceMemoryPoisonEnv:
         queries: Optional[list[FinanceQuery]] = None,
         tools: Optional[FinanceTools] = None,
         memory_path: Path | str = DATA_DIR / "clean_memories.jsonl",
+        memory_embedder=None,
         backend: Optional[str] = None,
         agent_backend: AgentBackend = "heuristic",
         agent_model: Optional[str] = None,
         request_timeout: float = 300.0,
         max_retries: int = 6,
+        tool_fact_mode: str = "full",
+        tool_fact_probability: float = 1.0,
         seed: int = 0,
     ):
         self.mode = mode
@@ -127,8 +130,11 @@ class FinanceMemoryPoisonEnv:
         self.queries = queries or load_queries()
         self.tools = tools or FinanceTools.from_data()
         self.memory_path = Path(memory_path)
+        self.memory_embedder = memory_embedder
         self.backend = backend
         self.agent_backend = agent_backend
+        self.tool_fact_mode = tool_fact_mode
+        self.tool_fact_probability = tool_fact_probability
         self.rng = random.Random(seed)
         if agent_backend == "heuristic":
             self.agent = HeuristicFinanceAgent()
@@ -139,6 +145,9 @@ class FinanceMemoryPoisonEnv:
                 model=agent_model,
                 request_timeout=request_timeout,
                 max_retries=max_retries,
+                tool_fact_mode=tool_fact_mode,
+                tool_fact_probability=tool_fact_probability,
+                seed=seed,
             )
         else:
             raise ValueError("agent_backend must be 'heuristic' or 'qwen'")
@@ -174,7 +183,8 @@ class FinanceMemoryPoisonEnv:
         if seed is not None:
             self.rng = random.Random(seed)
         self._store = FinanceMemoryStore.from_clean_corpus(
-            self.memory_path, backend=self.backend
+            self.memory_path,
+            embedder=self.memory_embedder,
         )
         self._query = self._sample_query(target_fact_id, query_id)
         self._target_fact_id = self._query.target_fact_id
@@ -229,12 +239,16 @@ class FinanceMemoryPoisonEnv:
         answer_source = None
         answer_uses_poison = None
         answer_contradicts_tool = None
+        tool_fact_mode = None
+        tool_fact_keys: list[str] = []
 
         if self.mode != EnvMode.RETRIEVAL_ONLY.value:
             if self.agent_backend == "qwen":
                 answer = self.agent.answer(
                     self._query, hits, self.tools, self.mode, self.user
                 )
+                tool_fact_mode = getattr(self.agent, "last_tool_fact_mode", None)
+                tool_fact_keys = list(getattr(self.agent, "last_tool_fact_keys", []))
             else:
                 answer = self.agent.answer(
                     self._query, hits, self.tools, self.mode, self.rng
@@ -286,6 +300,8 @@ class FinanceMemoryPoisonEnv:
             "answer_source": answer_source,
             "answer_uses_poison": answer_uses_poison,
             "answer_contradicts_tool": answer_contradicts_tool,
+            "tool_fact_mode": tool_fact_mode,
+            "tool_fact_keys": tool_fact_keys,
         }
 
         self._episode += 1
@@ -328,4 +344,6 @@ class FinanceMemoryPoisonEnv:
             answer_source=info["answer_source"],
             answer_uses_poison=info["answer_uses_poison"],
             answer_contradicts_tool=info["answer_contradicts_tool"],
+            tool_fact_mode=info["tool_fact_mode"],
+            tool_fact_keys=info["tool_fact_keys"],
         )

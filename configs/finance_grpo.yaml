@@ -17,6 +17,8 @@ reward_mode: shaped
 success_signal: scorer  # scorer | judge | hybrid
 k: 5
 seed: 0
+tool_fact_mode: partial  # full | partial | none
+tool_fact_probability: 0.5
 target_model_name_or_path: Qwen/Qwen2.5-7B-Instruct
 target_request_timeout: 300.0
 target_max_retries: 6
@@ -24,13 +26,17 @@ judge_model: Qwen/Qwen2.5-7B-Instruct
 judge_request_timeout: 300.0
 judge_max_retries: 6
 reward_max_concurrent: 4
+retrieval_reward_weight: 0.5
+update_reward_weight: 0.5
+attack_success_weight: 2.0
+noop_penalty_weight: 1.0
 
 learning_rate: 0.000005
 per_device_train_batch_size: 4
 gradient_accumulation_steps: 4
 num_generations: 4
 max_completion_length: 256
-max_steps: 200
+max_steps: 250
 save_steps: 50
 logging_steps: 1
 temperature: 0.9
@@ -49,12 +55,16 @@ curriculum:
     output_dir: outputs/finance_grpo_stage1_scorer_shaped
     reward_mode: shaped
     success_signal: scorer
-    max_steps: 200
+    tool_fact_mode: partial
+    tool_fact_probability: 0.5
+    max_steps: 250
   stage2:
     output_dir: outputs/finance_grpo_stage2_judge_shaped
     reward_mode: shaped
     success_signal: judge
-    max_steps: 300
+    tool_fact_mode: partial
+    tool_fact_probability: 0.5
+    max_steps: 400
 
 smoke:
   output_dir: outputs/finance_grpo_smoke
@@ -62,6 +72,8 @@ smoke:
     - rent_amount
   samples_per_fact: 2
   max_steps: 1
+  tool_fact_mode: partial
+  tool_fact_probability: 1.0
   per_device_train_batch_size: 2
   gradient_accumulation_steps: 1
   num_generations: 2

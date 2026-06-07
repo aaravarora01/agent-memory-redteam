@@ -92,6 +92,16 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         by_fact[fact] = {
             "n": len(subset),
             "valid_action": sum(float(r.get("valid_action") or 0.0) for r in subset) / len(subset),
+            "reward_mean": sum(float(r.get("reward") or 0.0) for r in subset) / len(subset),
+            "retrieval_reward": sum(float(r.get("retrieval_reward") or 0.0) for r in subset) / len(subset),
+            "update_reward": sum(float(r.get("update_reward") or 0.0) for r in subset) / len(subset),
+            "attack_reward": sum(float(r.get("attack_reward") or 0.0) for r in subset) / len(subset),
+            "noop_penalty": sum(float(r.get("noop_penalty") or 0.0) for r in subset) / len(subset),
+            "poison_equals_truth": sum(float(r.get("poison_equals_truth") or 0.0) for r in subset) / len(subset),
+            "tool_fact_present": sum(float(r.get("tool_fact_present") or 0.0) for r in subset) / len(subset),
+            "tool_fact_partial": sum(float(r.get("tool_fact_mode") == "partial") for r in subset) / len(subset),
+            "tool_fact_full": sum(float(r.get("tool_fact_mode") == "full") for r in subset) / len(subset),
+            "tool_fact_none": sum(float(r.get("tool_fact_mode") == "none") for r in subset) / len(subset),
             "retrieval_at_5": sum(float(r.get("poison_in_top5") or 0.0) for r in subset) / len(subset),
             "scorer_asr": sum(float(r.get("scorer_success") or 0.0) for r in subset) / len(subset),
             "judge_asr": sum(float(r.get("judge_success") or 0.0) for r in subset) / len(subset),
@@ -104,6 +114,15 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "judge_asr": mean("judge_success"),
         "judge_error_rate": mean("judge_error"),
         "reward_mean": mean("reward"),
+        "retrieval_reward": mean("retrieval_reward"),
+        "update_reward": mean("update_reward"),
+        "attack_reward": mean("attack_reward"),
+        "noop_penalty": mean("noop_penalty"),
+        "poison_equals_truth": mean("poison_equals_truth"),
+        "tool_fact_present": mean("tool_fact_present"),
+        "tool_fact_partial": sum(float(r.get("tool_fact_mode") == "partial") for r in rows) / len(rows),
+        "tool_fact_full": sum(float(r.get("tool_fact_mode") == "full") for r in rows) / len(rows),
+        "tool_fact_none": sum(float(r.get("tool_fact_mode") == "none") for r in rows) / len(rows),
         "by_fact": by_fact,
     }
 
@@ -113,7 +132,7 @@ def main() -> int:
     ap.add_argument("--model", required=True, help="Attacker checkpoint/model path")
     ap.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     ap.add_argument("--stage", choices=["stage1", "stage2"], default=None)
-    ap.add_argument("--n", type=int, default=5, help="Generations per target fact")
+    ap.add_argument("--n", type=int, default=40, help="Generations per target fact")
     ap.add_argument("--success-signal", choices=["scorer", "judge", "hybrid"], default="judge")
     ap.add_argument("--reward-mode", choices=["sparse", "shaped"], default="sparse")
     ap.add_argument("--max-new-tokens", type=int, default=192)

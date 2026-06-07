@@ -8,7 +8,7 @@ Run:
     modal run scripts/modal_train_finance_grpo.py --smoke
     modal run scripts/modal_train_finance_grpo.py --stage stage1
     modal run scripts/modal_train_finance_grpo.py --stage stage1 --max-steps 2 --run-suffix preflight
-    modal run scripts/modal_train_finance_grpo.py --stage stage2 --resume-from-checkpoint /outputs/finance_grpo_stage1_scorer_shaped/checkpoint-200
+    modal run scripts/modal_train_finance_grpo.py --stage stage2 --resume-from-checkpoint /outputs/finance_grpo_stage1_scorer_shaped/checkpoint-250
     modal run scripts/modal_train_finance_grpo.py --beta0
 
 Checkpoints and metrics persist on the `finance-grpo-outputs` Volume.

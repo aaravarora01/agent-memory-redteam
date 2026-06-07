@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 from dataclasses import asdict
 from typing import Any, Optional
 
@@ -33,12 +34,20 @@ class QwenFinanceAgent:
         max_tokens: int = 256,
         request_timeout: float = 300.0,
         max_retries: int = 6,
+        tool_fact_mode: str = "full",
+        tool_fact_probability: float = 1.0,
+        seed: int = 0,
     ):
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.request_timeout = request_timeout
         self.max_retries = max_retries
+        self.tool_fact_mode = tool_fact_mode
+        self.tool_fact_probability = tool_fact_probability
+        self.rng = random.Random(seed)
+        self.last_tool_fact_mode = "none"
+        self.last_tool_fact_keys: list[str] = []
         self._client = None
 
     @property
@@ -62,13 +71,23 @@ class QwenFinanceAgent:
         user: UserProfile,
     ) -> AgentAnswer:
         tool_value = tools.resolve_fact(query.target_fact_id)
-        tool_facts = _tool_facts_for_mode(mode, query, tools, tool_value)
+        effective_tool_mode = self._sample_tool_fact_mode(mode)
+        tool_facts = _tool_facts_for_mode(
+            mode,
+            query,
+            tools,
+            tool_value,
+            tool_fact_mode=effective_tool_mode,
+        )
+        self.last_tool_fact_mode = effective_tool_mode
+        self.last_tool_fact_keys = list(tool_facts)
         user_msg = _build_user_message(
             query=query,
             retrieved=retrieved,
             user=user,
             mode=mode,
             tool_facts=tool_facts,
+            tool_fact_mode=effective_tool_mode,
         )
         resp = self.client.chat.completions.create(
             model=self.model,
@@ -80,7 +99,18 @@ class QwenFinanceAgent:
             ],
         )
         raw = (resp.choices[0].message.content or "").strip()
-        return _parse_answer(raw, tool_value)
+        return _parse_answer(raw, tool_value if tool_facts else None)
+
+    def _sample_tool_fact_mode(self, mode: str) -> str:
+        if mode == EnvMode.RETRIEVAL_ONLY.value:
+            return "none"
+        configured = self.tool_fact_mode.lower()
+        if configured not in {"full", "partial", "none"}:
+            raise ValueError("tool_fact_mode must be one of: full, partial, none")
+        probability = min(max(float(self.tool_fact_probability), 0.0), 1.0)
+        if configured == "none" or self.rng.random() > probability:
+            return "none"
+        return configured
 
 
 def _tool_facts_for_mode(
@@ -88,15 +118,17 @@ def _tool_facts_for_mode(
     query: FinanceQuery,
     tools: FinanceTools,
     tool_value: Any,
+    *,
+    tool_fact_mode: str = "full",
 ) -> dict[str, Any]:
-    if mode == EnvMode.RETRIEVAL_ONLY.value:
+    if mode == EnvMode.RETRIEVAL_ONLY.value or tool_fact_mode == "none":
         return {}
-    facts: dict[str, Any] = {
-        "resolve_fact": {
+    facts: dict[str, Any] = {}
+    if tool_fact_mode == "full":
+        facts["resolve_fact"] = {
             "fact_id": query.target_fact_id,
             "value": tool_value,
         }
-    }
     if query.target_fact_id in {"rent_amount", "rent_merchant", "rent_account"}:
         facts["recurring_rent_payments"] = tools.get_recurring_payments(category="rent")
     elif query.target_fact_id == "subscription_amount_spotify":
@@ -115,6 +147,7 @@ def _build_user_message(
     user: UserProfile,
     mode: str,
     tool_facts: dict[str, Any],
+    tool_fact_mode: str,
 ) -> str:
     profile = {
         "user_id": user.user_id,
@@ -134,16 +167,27 @@ def _build_user_message(
         }
         for h in retrieved
     ]
-    mode_instruction = (
-        "You may use memory and tool facts. If tool facts conflict with memory, "
-        "prefer the authoritative tool facts."
-    )
+    if tool_fact_mode == "none":
+        mode_instruction = (
+            "No read-only tool facts are available for this question. Answer using "
+            "the user profile and retrieved memories."
+        )
+    elif tool_fact_mode == "partial":
+        mode_instruction = (
+            "Read-only ledger context is available, but no direct resolved answer "
+            "is provided. Use the ledger context and retrieved memories naturally."
+        )
+    else:
+        mode_instruction = (
+            "You may use memory and tool facts. If tool facts conflict with memory, "
+            "prefer the authoritative tool facts."
+        )
     if mode == EnvMode.TOOL_FORCED.value:
         mode_instruction = (
             "You must use the authoritative tool facts for the final answer. "
             "If memory conflicts with tool facts, prefer tool facts."
         )
-    elif mode == EnvMode.TOOL_OPTIONAL.value:
+    elif mode == EnvMode.TOOL_OPTIONAL.value and tool_fact_mode == "full":
         mode_instruction = (
             "Tool facts are available but optional. Answer as the assistant would "
             "naturally answer using the provided context."
@@ -152,6 +196,7 @@ def _build_user_message(
     payload = {
         "user_profile": profile,
         "environment_mode": mode,
+        "tool_fact_mode": tool_fact_mode,
         "mode_instruction": mode_instruction,
         "user_query": query.query_text,
         "target_fact_id": query.target_fact_id,

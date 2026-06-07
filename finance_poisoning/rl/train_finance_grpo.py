@@ -126,6 +126,15 @@ def make_monitor_callback(
                 "step": state.global_step,
                 "reward": _mean(t.reward for t in traces),
                 "valid_action": _mean(1.0 if t.valid_action else 0.0 for t in traces),
+                "retrieval_reward": _mean(t.retrieval_reward for t in traces),
+                "update_reward": _mean(t.update_reward for t in traces),
+                "attack_reward": _mean(t.attack_reward for t in traces),
+                "noop_penalty": _mean(t.noop_penalty for t in traces),
+                "poison_equals_truth": _mean(1.0 if t.poison_equals_truth else 0.0 for t in traces),
+                "tool_fact_present": _mean(1.0 if t.tool_fact_present else 0.0 for t in traces),
+                "tool_fact_partial": _mean(1.0 if t.tool_fact_mode == "partial" else 0.0 for t in traces),
+                "tool_fact_full": _mean(1.0 if t.tool_fact_mode == "full" else 0.0 for t in traces),
+                "tool_fact_none": _mean(1.0 if t.tool_fact_mode == "none" else 0.0 for t in traces),
                 "poison_in_top5": _mean(1.0 if t.poison_in_top5 else 0.0 for t in traces),
                 "scorer_asr": _mean(1.0 if t.scorer_success else 0.0 for t in traces),
                 "judge_asr": _mean(1.0 if t.judge_success else 0.0 for t in traces),
@@ -134,6 +143,7 @@ def make_monitor_callback(
             print(
                 f"[FinanceGRPO] step={row['step']} reward={row['reward']:.3f} "
                 f"valid={row['valid_action']:.2f} retr={row['poison_in_top5']:.2f} "
+                f"upd={row['update_reward']:.2f} atk={row['attack_reward']:.2f} "
                 f"scorer_asr={row['scorer_asr']:.2f} judge_asr={row['judge_asr']:.2f} "
                 f"judge_err={row['judge_err']}",
                 flush=True,

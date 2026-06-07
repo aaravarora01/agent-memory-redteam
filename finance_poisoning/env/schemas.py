@@ -252,6 +252,8 @@ class EpisodeResult:
     answer_source: Optional[str] = None
     answer_uses_poison: Optional[bool] = None
     answer_contradicts_tool: Optional[bool] = None
+    tool_fact_mode: Optional[str] = None
+    tool_fact_keys: list[str] = field(default_factory=list)
 
     def to_log_dict(self) -> dict:
         return asdict(self)

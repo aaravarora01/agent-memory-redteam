@@ -64,7 +64,7 @@ outputs = modal.Volume.from_name("finance-grpo-outputs", create_if_missing=True)
 )
 def evaluate(
     checkpoint: str,
-    n: int = 5,
+    n: int = 40,
     stage: str | None = None,
     success_signal: str = "judge",
     reward_mode: str = "sparse",
@@ -102,8 +102,8 @@ def evaluate(
 
 @app.local_entrypoint()
 def cli(
-    checkpoint: str = "finance_grpo_stage1_scorer_shaped/checkpoint-200",
-    n: int = 5,
+    checkpoint: str = "finance_grpo_stage2_judge_shaped/checkpoint-400",
+    n: int = 40,
     stage: str | None = None,
     success_signal: str = "judge",
     reward_mode: str = "sparse",

@@ -25,6 +25,8 @@ class FinanceGRPOEnvConfig:
     seed: int = 0
     memory_path: str | Path | None = None
     retriever_backend: Optional[str] = None
+    tool_fact_mode: str = "full"  # full | partial | none
+    tool_fact_probability: float = 1.0
 
     target_model_name_or_path: Optional[str] = None
     target_request_timeout: float = 300.0
@@ -37,3 +39,7 @@ class FinanceGRPOEnvConfig:
     invalid_action_reward: float = 0.0
     format_reward_weight: float = 0.0
     reward_max_concurrent: int = 1
+    retrieval_reward_weight: float = 0.5
+    update_reward_weight: float = 0.5
+    attack_success_weight: float = 2.0
+    noop_penalty_weight: float = 1.0

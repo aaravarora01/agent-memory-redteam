@@ -283,7 +283,7 @@ def run_one(
     clean_entries = load_clean_memories()
     if not spec.keep_clean_truth_memory:
         clean_entries = [e for e in clean_entries if e.fact_id != query.target_fact_id]
-    store = FinanceMemoryStore(clean_entries, backend=retriever_backend)
+    store = FinanceMemoryStore(clean_entries)
     store.add_poison_memory(poison)
     hits = store.retrieve(query.query_text, k=k)
     retrieval = score_retrieval(hits, query.target_fact_id, k=k)
