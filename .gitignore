@@ -49,3 +49,11 @@ other-codebase.txt
 
 # Internal milestone plan — not published with the repo.
 plan.md
+
+# Internal run/handoff notes — not published with the repo.
+DEADLINE_RUNBOOK.md
+RUN_MODAL.md
+
+# AI-assistant instruction files — internal, not published with the repo.
+AGENTS.md
+CLAUDE.md

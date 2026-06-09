@@ -2,7 +2,7 @@
 
 *An RL Framework for Persistent Memory Attacks on LLM Agents*. Frames memory poisoning as a two-phase MDP: Phase 1 ingests payloads into a persistent memory store; Phase 2 retrieves + executes on an independently-sampled user query that arrives later.
 
-This repo contains the **testbed + RL attacker** slice. The **finance domain benchmark** lives in [`finance_poisoning/README.md`](finance_poisoning/README.md). For implemented modules and conventions, see `CLAUDE.md`.
+This repo contains the **testbed + RL attacker** slice. The **finance domain benchmark** lives in [`finance_poisoning/README.md`](finance_poisoning/README.md).
 
 ## Prerequisites
 
@@ -105,10 +105,9 @@ T1/T2 not reaching 5/5 is the *expected* stealth-vs-ASR variance the §2.1 sweep
 
 ## Deadline Workflow
 
-If you need the shortest reliable path to interpretable results, start with
-[`DEADLINE_RUNBOOK.md`](DEADLINE_RUNBOOK.md). It separates the no-API finance
-simulator from the live LLM experiments and lists the exact commands to run in
-order. To regenerate a one-page local status report from existing artifacts:
+The shortest reliable path to interpretable results separates the no-API finance
+simulator from the live LLM experiments. To regenerate a one-page local status
+report from existing artifacts:
 
 ```bash
 python scripts/deadline_report.py
@@ -312,12 +311,7 @@ data/
 results/                  # logs/figures; *.jsonl/.csv/.png/.log all gitignored
   exp1_summary.json       # per-pair aggregates from §2.2 (committed)
   exp1_table.md           # §2.3 milestone-report table (committed)
-CLAUDE.md                 # conventions / commands / scope guardrails
 ```
-
-## Where to look next
-
-- `CLAUDE.md` — implemented modules, smoke commands, and design decisions (paired benign/malicious siblings, mask-and-rephrase generation, strict-JSON LLM judge, etc.).
 
 ## Common gotchas
 
