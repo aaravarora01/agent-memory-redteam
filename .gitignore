@@ -1,8 +1,21 @@
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
 .venv/
+venv/
 .env
 .DS_Store
+.idea/
+.vscode/
+.ipynb_checkpoints/
+
+# Loose training/eval artifacts that land in the repo root (the curated copies
+# live under modal_results/). Keep the root clean.
+/trainer_state.json
+/*_train_metrics.jsonl
+/*_eval.jsonl
+/*_eval_summary.json
 
 # Generated artifacts (regenerable from scripts/runs).
 results/*.png
@@ -33,3 +46,6 @@ finance_poisoning/results/*.log
 # Internal reference notes from the team's sibling IPI codebase
 # (not this project's code; not for redistribution).
 other-codebase.txt
+
+# Internal milestone plan — not published with the repo.
+plan.md

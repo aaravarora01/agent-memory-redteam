@@ -1,8 +1,8 @@
 # agent-memory-redteam
 
-Stanford CS224R final project — *An RL Framework for Persistent Memory Attacks on LLM Agents*. Frames memory poisoning as a two-phase MDP: Phase 1 ingests payloads into a persistent memory store; Phase 2 retrieves + executes on an independently-sampled user query that arrives later.
+*An RL Framework for Persistent Memory Attacks on LLM Agents*. Frames memory poisoning as a two-phase MDP: Phase 1 ingests payloads into a persistent memory store; Phase 2 retrieves + executes on an independently-sampled user query that arrives later.
 
-This repo contains the **testbed + RL attacker** slice (Mihir). The **finance domain benchmark** (Zihan) lives in [`finance_poisoning/README.md`](finance_poisoning/README.md). For other milestone scope, see `plan.md` (team ownership section) and `CLAUDE.md`.
+This repo contains the **testbed + RL attacker** slice. The **finance domain benchmark** lives in [`finance_poisoning/README.md`](finance_poisoning/README.md). For implemented modules and conventions, see `CLAUDE.md`.
 
 ## Prerequisites
 
@@ -12,11 +12,11 @@ This repo contains the **testbed + RL attacker** slice (Mihir). The **finance do
 
 ## Setup
 
-1. **Create / activate an env** (conda recommended — that's what's used in `CLAUDE.md` smoke commands):
+1. **Create / activate an env** (conda recommended):
 
    ```bash
-   conda create -n cs224r python=3.11 -y
-   conda activate cs224r
+   conda create -n memory-redteam python=3.11 -y
+   conda activate memory-redteam
    pip install -r requirements.txt
    ```
 
@@ -84,7 +84,7 @@ and vLLM loads Qwen2.5. Later requests are usually faster while the app is warm.
 The Modal image uses an NVIDIA CUDA development base image because recent vLLM
 builds can JIT-compile FlashInfer sampling kernels and need `nvcc` available.
 
-## Verify the pipeline (plan §1.7 smoke test)
+## Verify the pipeline
 
 ```bash
 python experiments/smoke_test.py --seeds 0 1 2 3 4
@@ -255,7 +255,7 @@ first arm to show judge success, authoritative tool facts are the likely
 blocker; if only `minimal_context` succeeds, the issue is combined truth
 grounding from profile + tools + clean memories.
 
-## Run Experiment 1 (plan §2.1 – §2.3)
+## Run Experiment 1
 
 Three steps — payload seeds, sweep, tabulate. Steps 1 and 2 hit the OpenAI API; step 3 is offline.
 
@@ -290,7 +290,7 @@ env/
   episode.py         # two-phase rollout (§1.6)
   judge.py           # strict-JSON LLM judge (§2.2)
 pismith_env/             # PISmith-style dataset + reward adapter
-finance_poisoning/         # Synthetic finance memory-poisoning benchmark (Zihan)
+finance_poisoning/         # Synthetic finance memory-poisoning benchmark
 attacks/handcrafted.py   # 10 hand-crafted payloads at stealth A/B/C (§2.1)
 rl/                       # PPO scaffolding (§3.x, not yet started)
 experiments/
@@ -312,18 +312,16 @@ data/
 results/                  # logs/figures; *.jsonl/.csv/.png/.log all gitignored
   exp1_summary.json       # per-pair aggregates from §2.2 (committed)
   exp1_table.md           # §2.3 milestone-report table (committed)
-plan.md                   # authoritative milestone plan (read this first)
 CLAUDE.md                 # conventions / commands / scope guardrails
 ```
 
 ## Where to look next
 
-- `plan.md` — milestone scope, day-1/day-2 task list, risk register, post-milestone backlog. Treat as the source of truth.
-- `CLAUDE.md` — implemented modules, smoke commands, decisions inherited from the team's sibling IPI codebase (paired benign/malicious siblings, mask-and-rephrase generation, strict-JSON LLM judge, etc.).
+- `CLAUDE.md` — implemented modules, smoke commands, and design decisions (paired benign/malicious siblings, mask-and-rephrase generation, strict-JSON LLM judge, etc.).
 
 ## Common gotchas
 
-- **`ModuleNotFoundError: numpy`** — you're on the base Python. Activate the `cs224r` conda env (or your equivalent venv) first.
+- **`ModuleNotFoundError: numpy`** — you're on the base Python. Activate the `memory-redteam` conda env (or your equivalent venv) first.
 - **`RuntimeError: No chat model API key is set`** — no `.env` at repo root, or the key isn't named `QWEN_API_KEY` / `DASHSCOPE_API_KEY`. For non-Qwen OpenAI-compatible providers, set `OPENAI_API_KEY` plus the provider base URL.
 - **First run is slow** — sentence-transformers downloads `all-MiniLM-L6-v2` (~80 MB) into `~/.cache/huggingface` the first time. Subsequent runs are fast.
 - **HF unauthenticated warning** — harmless; `HF_TOKEN` only matters if you hit rate limits on model downloads.

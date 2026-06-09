@@ -1,6 +1,6 @@
 # Finance Memory Poisoning Simulator
 
-Synthetic research environment for studying **persistent memory poisoning** in a dummy finance assistant. Part of the [agent-memory-redteam](../README.md) CS224R project (Zihan's stratified benchmark slice).
+Synthetic research environment for studying **persistent memory poisoning** in a dummy finance assistant. Part of the [agent-memory-redteam](../README.md) project (stratified benchmark slice).
 
 ## Safety
 
